@@ -45,6 +45,26 @@ pub struct CurlPaint {
     pub back: Option<TextureId>,
     pub paper: Color32,
     pub dark: bool,
+    /// Spine shading baked into the parts of the sheet that lie flat against the
+    /// spine: (width in px, strength 0..1). `None` in single-page mode.
+    pub gutter: Option<(f32, f32)>,
+}
+
+/// Darkening factor for a sheet vertex near the spine. The shade fades out
+/// smoothly as the paper lifts off the page (by wrap angle, which is continuous
+/// across the fold), so only paper lying flat by the spine gets it, without
+/// steps. Face-up and face-down (crossed over) parts are both covered.
+fn gutter_factor(v: &gl_curl::CurlVertex, g: Option<(f32, f32)>) -> f32 {
+    use std::f32::consts::FRAC_PI_2;
+    let Some((w, s)) = g else { return 1.0 };
+    let flat = if v.theta <= FRAC_PI_2 {
+        1.0 - v.theta / FRAC_PI_2
+    } else {
+        (v.theta - FRAC_PI_2) / FRAC_PI_2
+    };
+    let flat = flat.clamp(0.0, 1.0).powi(2);
+    let x = v.pos.x.abs();
+    if x >= w { 1.0 } else { 1.0 - s * (1.0 - x / w) * flat }
 }
 
 fn gray(v: f32, a: u8) -> Color32 {
@@ -148,31 +168,15 @@ pub fn draw_sheet(painter: &Painter, frame: &SheetFrame, cm: &CurlMesh, paint: &
             }
         },
         |v| {
+            let shade = v.shade() * gutter_factor(v, paint.gutter);
             if paint.front.is_some() {
-                gray(v.shade(), 255)
+                gray(shade, 255)
             } else {
-                tinted(paint.paper, v.shade())
+                tinted(paint.paper, shade)
             }
         },
     );
     painter.add(Shape::mesh(front));
-
-    // Shading bands belong to this sheet only: never let them spill onto the facing page.
-    let sheet_painter = painter.with_clip_rect(painter.clip_rect().intersect(frame.rect));
-    // occlusion just behind the fold, on the still-flat front
-    if let Some(f) = cm.fold {
-        let span = (frame.w() + frame.h()) * 2.0;
-        let a = if paint.dark { 0.22 } else { 0.08 } * (1.0 - cm.progress);
-        sheet_painter.add(shadow_band(
-            frame,
-            f.point,
-            f.normal * -1.0,
-            (f.radius * 3.0).max(6.0),
-            span,
-            a,
-            0.0,
-        ));
-    }
 
     if cm.back.is_empty() {
         return;
@@ -185,12 +189,19 @@ pub fn draw_sheet(painter: &Painter, frame: &SheetFrame, cm: &CurlMesh, paint: &
         &cm.back,
         TextureId::default(),
         |_| (egui::epaint::WHITE_UV.x, egui::epaint::WHITE_UV.y),
-        |v| tinted(paint.paper, v.shade()),
+        |v| tinted(paint.paper, v.shade() * gutter_factor(v, paint.gutter)),
     );
     painter.add(Shape::mesh(base));
     match paint.back {
         Some(tex) => {
-            let m = mesh_from(frame, cm, &cm.back, tex, |uv| (back_u(uv.x), uv.y), |v| gray(v.shade(), 255));
+            let m = mesh_from(
+                frame,
+                cm,
+                &cm.back,
+                tex,
+                |uv| (back_u(uv.x), uv.y),
+                |v| gray(v.shade() * gutter_factor(v, paint.gutter), 255),
+            );
             painter.add(Shape::mesh(m));
         }
         None => {
@@ -215,11 +226,16 @@ pub fn page_shadow(painter: &Painter, rect: Rect, dark: bool) {
     painter.add(s.as_shape(rect, egui::CornerRadius::same(2)));
 }
 
+/// Width (px) and strength (0..1) of the spine shading for a spread.
+pub fn gutter_params(spread: Rect, dark: bool) -> (f32, f32) {
+    (spread.width() * 0.045, if dark { 70.0 / 255.0 } else { 34.0 / 255.0 })
+}
+
 /// Gutter shading on both sides of the spine (two-page spread).
 pub fn gutter(painter: &Painter, spread: Rect, dark: bool) {
     let x = spread.center().x;
-    let w = spread.width() * 0.045;
-    let a = if dark { 70 } else { 34 };
+    let (w, s) = gutter_params(spread, dark);
+    let a = (s * 255.0) as u8;
     for (from, to) in [(x, x - w), (x, x + w)] {
         let mut m = Mesh::default();
         let c0 = Color32::from_black_alpha(a);

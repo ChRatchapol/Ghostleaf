@@ -795,7 +795,7 @@ impl Reader {
                     max_radius: fw * 0.09,
                     edge: t.edge,
                 };
-                let cm = c.mesh(36, 48);
+                let cm = c.mesh(56, 48);
                 let (fv, tv) = (t.from_view, t.to_view);
                 let (f_first, f_second) = self.view_rects(area, spread, rtl, fv, blank);
                 if spread {
@@ -803,16 +803,16 @@ impl Reader {
                     curl_draw::page_shadow(&painter, spread_rect, dark);
                     self.draw_slot(&painter, self.slot(fv, blank), f_first, env.pal);
                     self.draw_slot(&painter, self.slot(tv + 1, blank), f_second.unwrap(), env.pal);
+                    curl_draw::gutter(&painter, spread_rect, dark);
                     curl_draw::draw_under_shadow(&painter.with_clip_rect(f_second.unwrap()), &frame, &cm, dark);
                     let paint = CurlPaint {
                         front: self.slot_tex(self.slot(fv + 1, blank)),
                         back: self.slot_tex(self.slot(tv, blank)),
                         paper: self.slot_paper(self.slot(fv + 1, blank), env.pal),
                         dark,
+                        gutter: Some(curl_draw::gutter_params(spread_rect, dark)),
                     };
                     curl_draw::draw_sheet(&painter.with_clip_rect(spread_rect.expand(2.0)), &frame, &cm, &paint);
-                    // the spine shadow sits on top: the sheet bends into the gutter too
-                    curl_draw::gutter(&painter, spread_rect, dark);
                 } else {
                     curl_draw::page_shadow(&painter, f_first, dark);
                     self.draw_slot(&painter, self.slot(tv, blank), f_first, env.pal);
@@ -823,6 +823,7 @@ impl Reader {
                         back: None,
                         paper: self.slot_paper(self.slot(fv, blank), env.pal),
                         dark,
+                        gutter: None,
                     };
                     curl_draw::draw_sheet(&clip, &frame, &cm, &paint);
                 }
