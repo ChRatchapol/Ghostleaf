@@ -1,0 +1,20 @@
+[package]
+name = "ghostleaf-android"
+description = "Ghostleaf for Android: the native library loaded by the Android app (android/)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# libghostleaf.so, loaded by NativeActivity (see android/app/src/main/AndroidManifest.xml)
+name = "ghostleaf"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[target.'cfg(target_os = "android")'.dependencies]
+ghostleaf = { path = "../../app" }
+winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }
+
+[lints]
+workspace = true

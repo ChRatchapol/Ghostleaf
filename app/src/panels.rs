@@ -283,6 +283,7 @@ pub fn privacy_window(
             section(ui, t.data_folder);
             ui.horizontal(|ui| {
                 ui.add(egui::Label::new(egui::RichText::new(store.root().display().to_string()).monospace().size(12.0)).truncate());
+                #[cfg(not(target_os = "android"))]
                 if ui.button(t.open_folder).clicked() {
                     let _ = opener::open(store.root());
                 }

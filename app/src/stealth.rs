@@ -4,7 +4,12 @@
 use crate::style::Palette;
 use egui::{Color32, Pos2, Rect};
 use gl_core::{Stealth as StealthCfg, StealthStyle};
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::Receiver;
+
+#[cfg(not(target_os = "android"))]
+type BossKey = (global_hotkey::GlobalHotKeyManager, global_hotkey::hotkey::HotKey);
+#[cfg(target_os = "android")]
+type BossKey = ();
 
 pub struct Stealth {
     pub hidden: bool,
@@ -13,7 +18,7 @@ pub struct Stealth {
     minimized: bool,
     /// Ignore pointer-leave events until this time (e.g. right after a native file dialog).
     suppress_until: f64,
-    hotkey: Option<(global_hotkey::GlobalHotKeyManager, global_hotkey::hotkey::HotKey)>,
+    hotkey: Option<BossKey>,
     hotkey_rx: Option<Receiver<()>>,
 }
 
@@ -35,7 +40,14 @@ impl Stealth {
         self.pending_at = None;
     }
 
+    /// No global hotkeys on Android.
+    #[cfg(target_os = "android")]
+    pub fn sync_boss_key(&mut self, _enabled: bool, _ctx: &egui::Context) {
+        let _ = (&self.hotkey, &self.hotkey_rx);
+    }
+
     /// Register / unregister the global boss key (Ctrl+Alt+H).
+    #[cfg(not(target_os = "android"))]
     pub fn sync_boss_key(&mut self, enabled: bool, ctx: &egui::Context) {
         use global_hotkey::{
             GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
@@ -57,7 +69,7 @@ impl Stealth {
         if manager.register(hk).is_err() {
             return;
         }
-        let (tx, rx) = channel();
+        let (tx, rx) = std::sync::mpsc::channel();
         let ctx = ctx.clone();
         let id = hk.id();
         GlobalHotKeyEvent::set_event_handler(Some(move |e: GlobalHotKeyEvent| {

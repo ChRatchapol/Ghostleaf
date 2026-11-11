@@ -26,3 +26,10 @@ desktop.ini
 # not for redistribution as raw files. Generate locally: scripts/prepare-sounds.py
 /app/assets/sounds/*.wav
 /app/assets/sounds/candidates/
+
+# Android build output (libghostleaf.so / libpdfium.so are built/fetched by scripts)
+/android/app/src/main/jniLibs/
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties

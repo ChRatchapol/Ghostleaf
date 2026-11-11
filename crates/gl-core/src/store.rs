@@ -15,6 +15,14 @@ use std::fs;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
+static PLATFORM_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Mobile platforms tell us their app-private data folder (there is no
+/// executable folder or XDG/AppData there). Call before [`Store::open`].
+pub fn set_platform_root(root: PathBuf) {
+    let _ = PLATFORM_ROOT.set(root);
+}
+
 #[derive(Clone, Debug)]
 pub struct Store {
     root: PathBuf,
@@ -30,6 +38,9 @@ pub struct StoredFile {
 impl Store {
     /// Resolve the data folder (portable or per-user) and create it.
     pub fn open() -> Store {
+        if let Some(root) = PLATFORM_ROOT.get() {
+            return Store::at(root.clone(), false);
+        }
         let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
         if let Some(dir) = &exe_dir
             && (dir.join("portable.flag").exists() || dir.join("ghostleaf-data").is_dir())

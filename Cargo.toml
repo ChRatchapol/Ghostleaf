@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/gl-core", "crates/gl-formats", "crates/gl-curl", "app"]
+members = ["crates/gl-core", "crates/gl-formats", "crates/gl-curl", "app", "crates/gl-android"]
 
 [workspace.package]
 version = "0.1.0"

@@ -10,7 +10,7 @@ pub mod store;
 
 pub use library::{BookEntry, Bookmark, Format, Library, Location};
 pub use settings::*;
-pub use store::{Store, StoredFile, book_id};
+pub use store::{Store, StoredFile, book_id, set_platform_root};
 
 /// Seconds since the Unix epoch (local clock; used only for sorting "recent").
 pub fn now_secs() -> u64 {

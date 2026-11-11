@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <b>Windows</b> (v1) · macOS · Linux · <i>Android &amp; iOS planned</i><br>
+  <b>Windows</b> · Linux · macOS · <b>Android</b> (in progress, <a href="docs/ANDROID.md">docs/ANDROID.md</a>) · <i>iOS planned</i><br>
   Written in Rust · MIT OR Apache-2.0
 </p>
 

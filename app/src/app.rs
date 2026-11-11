@@ -43,10 +43,15 @@ pub struct GhostleafApp {
     font_list: Option<Vec<String>>,
     toast: Option<(String, f64)>,
     startup_file: Option<PathBuf>,
+    inbox: Option<PathBuf>,
 }
 
 impl GhostleafApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, startup_file: Option<PathBuf>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, launch: crate::Launch) -> Self {
+        let crate::Launch {
+            open_file: startup_file,
+            inbox,
+        } = launch;
         style::install_fonts(&cc.egui_ctx);
         let store = Store::open();
         let settings = store.load_settings();
@@ -72,6 +77,7 @@ impl GhostleafApp {
             font_list: None,
             toast: None,
             startup_file,
+            inbox,
         }
     }
 
@@ -105,12 +111,17 @@ impl GhostleafApp {
     }
 
     fn open_dialog(&mut self, ctx: &egui::Context) {
+        #[cfg(not(target_os = "android"))]
         let files = rfd::FileDialog::new()
             .add_filter("PDF, TXT, CSV", gl_core::Format::EXTENSIONS)
             .add_filter("PDF", &["pdf"])
             .add_filter("Text", &["txt", "text", "md", "log"])
             .add_filter("CSV / TSV", &["csv", "tsv", "tab"])
             .pick_files();
+        // Android: the system file picker arrives in phase 2; for now books are
+        // added from the app's Books folder at start-up.
+        #[cfg(target_os = "android")]
+        let files: Option<Vec<PathBuf>> = None;
         let now = ctx.input(|i| i.time);
         self.stealth.suppress(now, 1.0);
         let Some(files) = files else { return };
@@ -204,6 +215,17 @@ impl eframe::App for GhostleafApp {
         let pal = style::palette(&self.settings);
         let frameless = self.settings.title_bar == TitleBar::Hidden;
 
+        if let Some(dir) = self.inbox.take() {
+            // Add every supported book in the inbox folder (no copy, no auto-open).
+            if let Ok(rd) = std::fs::read_dir(&dir) {
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if p.is_file() && Format::from_path(&p).is_some() {
+                        self.import(&p);
+                    }
+                }
+            }
+        }
         if let Some(f) = self.startup_file.take()
             && let Some(id) = self.import(&f)
         {
