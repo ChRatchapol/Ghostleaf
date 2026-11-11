@@ -74,6 +74,10 @@ macOS / Linux: `./scripts/fetch-pdfium.sh && cargo run --release`. On Linux, ins
 
 The default renderer is wgpu (DirectX 12 / Vulkan / Metal). Set `GHOSTLEAF_RENDERER=glow` to use OpenGL instead.
 
+## Downloads
+
+Ready-to-run Windows and Linux builds are attached to each [GitHub Release](https://github.com/ChRatchapol/Ghostleaf/releases): unzip and run, nothing to install. Verify downloads with `SHA256SUMS.txt`. How releases are made: [docs/RELEASING.md](docs/RELEASING.md).
+
 ## Keyboard
 
 | Key | Action |

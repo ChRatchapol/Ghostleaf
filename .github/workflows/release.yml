@@ -1,0 +1,106 @@
+name: Release
+
+# Push a tag like v0.1.0 (it must match the version in Cargo.toml), or run manually.
+# Builds Windows + Linux, then creates a *draft* GitHub Release with all files and
+# SHA256SUMS.txt. Review the draft on GitHub, then press "Publish".
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0); must already exist"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  check:
+    name: Version & privacy checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Tag matches Cargo.toml version
+        run: |
+          VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+          echo "Cargo.toml: $VERSION, tag: $TAG"
+          [ "v$VERSION" = "$TAG" ] || { echo "::error::Tag $TAG does not match Cargo.toml version $VERSION"; exit 1; }
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check bans licenses
+
+  windows:
+    name: Windows x64
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Recorded sounds
+        shell: bash
+        env:
+          SOUNDS_PASSPHRASE: ${{ secrets.SOUNDS_PASSPHRASE }}
+        run: bash scripts/decrypt-sounds.sh
+      - run: cargo test --workspace --release
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64
+    needs: check
+    # oldest supported runner = widest glibc compatibility
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libxkbcommon-dev libgtk-3-dev
+      - name: Recorded sounds
+        env:
+          SOUNDS_PASSPHRASE: ${{ secrets.SOUNDS_PASSPHRASE }}
+        run: bash scripts/decrypt-sounds.sh
+      - run: bash scripts/fetch-pdfium.sh
+      - run: cargo test --workspace --release
+      - run: bash scripts/package-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub Release
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Checksums
+        working-directory: files
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Ghostleaf ${{ env.TAG }}
+          draft: true
+          generate_release_notes: true
+          files: files/*
