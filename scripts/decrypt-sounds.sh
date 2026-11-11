@@ -9,6 +9,8 @@ if [ -z "${SOUNDS_PASSPHRASE:-}" ] || [ ! -f "$ENC" ]; then
   echo "Recorded sounds not available; using synthesized sounds."
   exit 0
 fi
+# the folder only holds git-ignored files, so a fresh checkout doesn't have it
+mkdir -p "$ROOT/app/assets/sounds"
 gpg --batch --yes --pinentry-mode loopback --decrypt --passphrase "$SOUNDS_PASSPHRASE" "$ENC" \
   | tar -xzf - -C "$ROOT/app/assets/sounds"
 echo "Recorded sounds restored: $(ls "$ROOT/app/assets/sounds"/*.wav | wc -l) files"
