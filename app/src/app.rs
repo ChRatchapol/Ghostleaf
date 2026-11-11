@@ -44,6 +44,9 @@ pub struct GhostleafApp {
     toast: Option<(String, f64)>,
     startup_file: Option<PathBuf>,
     inbox: Option<PathBuf>,
+    insets: Option<crate::InsetsFn>,
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    was_focused: bool,
 }
 
 impl GhostleafApp {
@@ -51,6 +54,7 @@ impl GhostleafApp {
         let crate::Launch {
             open_file: startup_file,
             inbox,
+            insets,
         } = launch;
         style::install_fonts(&cc.egui_ctx);
         let store = Store::open();
@@ -78,6 +82,8 @@ impl GhostleafApp {
             toast: None,
             startup_file,
             inbox,
+            insets,
+            was_focused: true,
         }
     }
 
@@ -104,7 +110,15 @@ impl GhostleafApp {
     fn open_book(&mut self, id: &str, ctx: &egui::Context) {
         if let Some(b) = self.library.get_mut(id) {
             b.last_opened = gl_core::now_secs();
-            let b = b.clone();
+            let mut b = b.clone();
+            match crate::resolve_book_path(&b.path) {
+                Some(p) => b.path = p,
+                None => {
+                    let msg = i18n::tr(self.settings.language).file_missing.to_string();
+                    self.toast = Some((msg, ctx.input(|i| i.time) + 3.0));
+                    return;
+                }
+            }
             self.reader = Some(Reader::open(&b, ctx, &self.settings));
             self.library_dirty = true;
         }
@@ -118,10 +132,13 @@ impl GhostleafApp {
             .add_filter("Text", &["txt", "text", "md", "log"])
             .add_filter("CSV / TSV", &["csv", "tsv", "tab"])
             .pick_files();
-        // Android: the system file picker arrives in phase 2; for now books are
-        // added from the app's Books folder at start-up.
+        // Android: the system picker runs in MainActivity; results are collected
+        // when the app regains focus (see `poll_android_documents`).
         #[cfg(target_os = "android")]
-        let files: Option<Vec<PathBuf>> = None;
+        let files: Option<Vec<PathBuf>> = {
+            crate::android::pick_documents();
+            None
+        };
         let now = ctx.input(|i| i.time);
         self.stealth.suppress(now, 1.0);
         let Some(files) = files else { return };
@@ -159,7 +176,12 @@ impl GhostleafApp {
             self.applied_theme = Some(key);
         }
         let tb = (self.settings.title_bar, key);
+        #[cfg(target_os = "android")]
         if self.applied_titlebar != Some(tb) {
+            crate::android::set_bar_colors([pal.bg.r(), pal.bg.g(), pal.bg.b()], !pal.dark);
+            self.applied_titlebar = Some(tb);
+        }
+        if !cfg!(target_os = "android") && self.applied_titlebar != Some(tb) {
             let was_hidden = matches!(self.applied_titlebar, Some((TitleBar::Hidden, _)));
             match self.settings.title_bar {
                 TitleBar::Hidden => ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false)),
@@ -209,6 +231,73 @@ impl GhostleafApp {
 
 impl eframe::App for GhostleafApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        // Keep the UI clear of system bars (Android status / navigation bar).
+        let [top, bottom, left, right] = self.insets.as_ref().map(|f| f()).unwrap_or([0.0; 4]);
+        if top + bottom + left + right > 0.0 {
+            let ppp = ui.ctx().pixels_per_point();
+            let full = ui.max_rect();
+            ui.painter().rect_filled(full, 0.0, style::palette(&self.settings).bg);
+            let inner = egui::Rect::from_min_max(
+                full.min + egui::vec2(left / ppp, top / ppp),
+                full.max - egui::vec2(right / ppp, bottom / ppp),
+            );
+            ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| self.ui_inner(ui, frame));
+        } else {
+            self.ui_inner(ui, frame);
+        }
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.save(f64::MAX, true);
+    }
+}
+
+impl GhostleafApp {
+    /// Android: collect documents from the system picker / "Open with". They are
+    /// queued in MainActivity, so we look when the app (re)gains focus and
+    /// shortly after start-up (an "Open with" launch).
+    #[cfg(target_os = "android")]
+    fn poll_android_documents(&mut self, ctx: &egui::Context, now: f64) {
+        let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+        let regained = focused && !self.was_focused;
+        self.was_focused = focused;
+        if now < 3.0 {
+            ctx.request_repaint_after(std::time::Duration::from_millis(300));
+        } else if !regained {
+            return;
+        }
+        let mut first = None;
+        for d in crate::android::take_documents() {
+            if let Some(id) = self.import_uri(&d.uri, &d.name) {
+                first.get_or_insert(id);
+            }
+        }
+        if let Some(id) = first {
+            self.open_book(&id, ctx);
+        }
+    }
+
+    /// Add a picked document (content URI) to the library. Nothing is copied:
+    /// we read it once through a descriptor to identify it, and keep the URI.
+    #[cfg(target_os = "android")]
+    fn import_uri(&mut self, uri: &str, name: &str) -> Option<String> {
+        let path = crate::android::open_uri(uri)?;
+        let format = Format::from_path(Path::new(name)).or_else(|| {
+            let mut b = [0u8; 5];
+            use std::io::Read;
+            std::fs::File::open(&path).ok()?.read_exact(&mut b).ok()?;
+            (&b == b"%PDF-").then_some(Format::Pdf)
+        });
+        let id = book_id(&path).ok();
+        crate::android::close_path(&path);
+        let (format, id) = (format?, id?);
+        let title = gl_formats::title_from_path(Path::new(name));
+        self.library.upsert(id.clone(), PathBuf::from(uri), title, format);
+        self.library_dirty = true;
+        Some(id)
+    }
+
+    fn ui_inner(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let now = ctx.input(|i| i.time);
         let t = self.t();
@@ -231,6 +320,9 @@ impl eframe::App for GhostleafApp {
         {
             self.open_book(&id, &ctx);
         }
+
+        #[cfg(target_os = "android")]
+        self.poll_android_documents(&ctx, now);
 
         // drag & drop
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
@@ -312,6 +404,9 @@ impl eframe::App for GhostleafApp {
             }
         }
         if close_reader {
+            if let Some(r) = &self.reader {
+                crate::release_book_path(&r.path);
+            }
             self.reader = None;
             self.library_dirty = true;
         }
@@ -384,9 +479,5 @@ impl eframe::App for GhostleafApp {
         if self.settings_dirty || self.library_dirty {
             ctx.request_repaint_after(std::time::Duration::from_millis(1100));
         }
-    }
-
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        self.save(f64::MAX, true);
     }
 }

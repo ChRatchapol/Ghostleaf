@@ -1,6 +1,6 @@
 // Ghostleaf for Android. The whole app is native Rust (libghostleaf.so, built with
 // `cargo ndk` into src/main/jniLibs), started by the platform NativeActivity.
-// There is no Java/Kotlin code yet (phase 2 adds a small activity for the file picker).
+// A small Java activity (MainActivity) adds the file picker, "Open with" and system-bar colours.
 plugins {
     id("com.android.application")
 }

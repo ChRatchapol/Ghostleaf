@@ -64,6 +64,10 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-ndk
+      - name: Recorded sounds
+        env:
+          SOUNDS_PASSPHRASE: ${{ secrets.SOUNDS_PASSPHRASE }}
+        run: bash scripts/decrypt-sounds.sh
       - name: Build APK
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"

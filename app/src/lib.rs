@@ -8,6 +8,8 @@
 //! This crate is shared by the desktop executable (`src/main.rs`) and the
 //! Android library (`crates/gl-android`).
 
+#[cfg(target_os = "android")]
+mod android;
 mod app;
 mod curl_draw;
 mod i18n;
@@ -23,9 +25,14 @@ mod worker;
 
 use std::path::PathBuf;
 
+/// System bar insets in physical pixels: [top, bottom, left, right].
+pub type InsetsFn = Box<dyn Fn() -> [f32; 4]>;
+
 /// Where a run of the app starts.
 #[derive(Default)]
 pub struct Launch {
+    /// Areas covered by system bars (Android status / navigation bar).
+    pub insets: Option<InsetsFn>,
     /// A file to open straight away (desktop "Open with…").
     pub open_file: Option<PathBuf>,
     /// A folder whose books are added to the library at start-up (Android phase 1:
@@ -52,6 +59,28 @@ pub fn run(options: eframe::NativeOptions, launch: Launch) -> eframe::Result {
     )
 }
 
+/// The path to read a library entry from: on Android, books picked through the
+/// system picker are stored as `content://` URIs and opened through a file
+/// descriptor; everywhere else the path is used as is.
+pub(crate) fn resolve_book_path(path: &std::path::Path) -> Option<PathBuf> {
+    #[cfg(target_os = "android")]
+    if let Some(uri) = path.to_str().filter(|s| s.starts_with("content://")) {
+        return android::open_uri(uri);
+    }
+    Some(path.to_path_buf())
+}
+
+/// Whether a library entry can (probably) still be opened.
+pub(crate) fn book_available(path: &std::path::Path) -> bool {
+    path.to_str().is_some_and(|s| s.starts_with("content://")) || path.exists()
+}
+
+/// Release whatever [`resolve_book_path`] opened (Android file descriptors).
+pub(crate) fn release_book_path(_path: &std::path::Path) {
+    #[cfg(target_os = "android")]
+    android::close_path(_path);
+}
+
 /// Desktop entry point.
 #[cfg(not(target_os = "android"))]
 pub fn run_desktop() -> eframe::Result {
@@ -75,7 +104,14 @@ pub fn run_desktop() -> eframe::Result {
         renderer,
         ..Default::default()
     };
-    run(options, Launch { open_file, inbox: None })
+    run(
+        options,
+        Launch {
+            open_file,
+            inbox: None,
+            insets: None,
+        },
+    )
 }
 
 /// Android entry point, called from `android_main` in `crates/gl-android`.
@@ -96,12 +132,36 @@ pub fn run_android(app: winit::platform::android::activity::AndroidApp) {
     if let Some(d) = &inbox {
         let _ = std::fs::create_dir_all(d);
     }
+    // JNI bridge to MainActivity (file picker, "Open with", system bar colours)
+    android::init(app.vm_as_ptr(), app.activity_as_ptr());
+    let a2 = app.clone();
+    let insets: InsetsFn = Box::new(move || {
+        // content_rect = the part of the window not covered by system bars (or the keyboard)
+        let r = a2.content_rect();
+        if r.right <= r.left || r.bottom <= r.top {
+            return [0.0; 4];
+        }
+        let (w, h) = a2.native_window().map(|w| (w.width(), w.height())).unwrap_or((r.right, r.bottom));
+        [
+            r.top.max(0) as f32,
+            (h - r.bottom).max(0) as f32,
+            r.left.max(0) as f32,
+            (w - r.right).max(0) as f32,
+        ]
+    });
     let options = eframe::NativeOptions {
         android_app: Some(app),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
-    if let Err(e) = run(options, Launch { open_file: None, inbox }) {
+    if let Err(e) = run(
+        options,
+        Launch {
+            open_file: None,
+            inbox,
+            insets: Some(insets),
+        },
+    ) {
         log::error!("Ghostleaf stopped: {e}");
     }
 }

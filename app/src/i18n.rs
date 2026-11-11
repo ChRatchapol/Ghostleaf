@@ -85,7 +85,6 @@ pub struct Tr {
     pub reveal_hint: &'static str,
     pub go_to_page: &'static str,
     pub more: &'static str,
-    pub books_folder_hint: &'static str,
 }
 
 pub const EN: Tr = Tr {
@@ -171,7 +170,6 @@ pub const EN: Tr = Tr {
     reveal_hint: "Move the mouse here to continue",
     go_to_page: "Go to page",
     more: "More",
-    books_folder_hint: "Copy PDF, TXT or CSV files into Android/data/app.ghostleaf/files/Books (over USB from a computer), then reopen Ghostleaf. A file picker is coming next.",
 };
 
 pub const TH: Tr = Tr {
@@ -257,7 +255,6 @@ pub const TH: Tr = Tr {
     reveal_hint: "เลื่อนเมาส์มาที่นี่เพื่ออ่านต่อ",
     go_to_page: "ไปที่หน้า",
     more: "เพิ่มเติม",
-    books_folder_hint: "คัดลอกไฟล์ PDF, TXT หรือ CSV ไปไว้ที่ Android/data/app.ghostleaf/files/Books (ผ่าน USB จากคอมพิวเตอร์) แล้วเปิด Ghostleaf ใหม่ ตัวเลือกไฟล์จะมาในเวอร์ชันถัดไป",
 };
 
 pub fn system_is_thai() -> bool {

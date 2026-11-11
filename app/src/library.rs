@@ -102,8 +102,7 @@ fn header(ui: &mut egui::Ui, t: &Tr, pal: Palette, act: &mut LibAction, frameles
                 crate::titlebar::window_controls(ui, pal);
                 ui.add_space(10.0);
             }
-            // Android: the system file picker arrives in phase 2 (see the hint below the header).
-            if !cfg!(target_os = "android") {
+            {
                 let open = egui::Button::new(egui::RichText::new(t.open).color(pal.paper).font(style::semibold(14.0)))
                     .fill(pal.ink)
                     .corner_radius(CornerRadius::same(18))
@@ -157,10 +156,7 @@ pub fn library_ui(
     };
     egui::Frame::new().inner_margin(margin).show(ui, |ui| {
         header(ui, t, pal, &mut act, frameless, compact);
-        if cfg!(target_os = "android") && lib.books.is_empty() {
-            ui.add_space(8.0);
-            ui.label(egui::RichText::new(t.books_folder_hint).small().color(pal.muted));
-        }
+
         ui.add_space(26.0);
 
         if lib.books.is_empty() {
@@ -200,7 +196,7 @@ pub fn library_ui(
                         let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, cover_h + 58.0), Sense::click());
                         let cover = Rect::from_min_size(rect.min, Vec2::new(card_w, cover_h));
                         let painter = ui.painter();
-                        let missing = !book.path.exists();
+                        let missing = !crate::book_available(&book.path);
                         let lift = if resp.hovered() { -3.0 } else { 0.0 };
                         let cover_r = cover.translate(Vec2::new(0.0, lift));
                         let shadow = egui::Shadow {

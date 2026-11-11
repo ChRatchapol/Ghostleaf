@@ -1,7 +1,8 @@
 # Android
 
-Status: **phase 1**. The app starts on Android and shows your library; the
-system file picker and phone-specific UI come next (see the plan below).
+Status: **phase 2**. Same app as on desktop: library, PDF/TXT/CSV reading,
+page curl, sounds, themes, stealth (covers the page when you leave the app),
+the system file picker and "Open with Ghostleaf".
 
 - arm64 (`arm64-v8a`) only, Android 8.0+ (API 26)
 - The manifest requests **no permissions at all**, not even `INTERNET`, so
@@ -20,18 +21,13 @@ apps" for your file manager), or with `adb install Ghostleaf-*.apk`.
 Until phase 5 the APK is signed with a debug key, so a later properly signed
 version will need an uninstall first.
 
-## Adding books (phase 1)
+## Adding books
 
-Until the file picker lands, Ghostleaf adds every PDF/TXT/CSV it finds in its
-own folder at start-up:
-
-```
-Internal storage/Android/data/app.ghostleaf/files/Books/
-```
-
-Connect the phone to a computer over USB (File transfer), open that folder,
-copy books in, then start Ghostleaf. (On the phone itself most file managers
-can't open `Android/data` on Android 11+; the computer can.)
+- **Open…** in the library shows Android's file picker (pick several at once).
+- Or use **Open with → Ghostleaf** / **Share** from a file manager, browser downloads, mail, etc.
+- Books are **not copied**: Ghostleaf keeps a read permission for each picked
+  file and reopens it from where it is.
+- Also scanned at start-up: `Android/data/app.ghostleaf/files/Books/` (handy over USB).
 
 ## Building locally
 
@@ -48,7 +44,8 @@ Logs: `adb logcat -s ghostleaf`.
 ## How it fits together
 
 ```
-android/                     Gradle project (no Java/Kotlin yet): manifest, icons
+android/                     Gradle project: manifest, icons, MainActivity.java
+                             (file picker, "Open with", system-bar colours)
   app/src/main/jniLibs/      filled by the build: libghostleaf.so + libpdfium.so
 crates/gl-android            android_main() → libghostleaf.so
 app/  (ghostleaf_app lib)    the whole app, shared with desktop; desktop-only parts
@@ -57,8 +54,8 @@ app/  (ghostleaf_app lib)    the whole app, shared with desktop; desktop-only pa
 
 ## Plan
 
-1. ✅ Gradle project, Android entry point, APK in CI, library from the Books folder
-2. Android file picker (Storage Access Framework) + "Open with Ghostleaf" + back button
-3. Phone layout: portrait single page / landscape spread, safe areas, touch targets
-4. Mobile stealth: hide on app switch, blurred recents, optional screenshot block, two-finger tap veil
+1. ✅ Gradle project, Android entry point, APK in CI
+2. ✅ File picker, "Open with Ghostleaf", back button, phone layout, system bars, touch stealth
+3. Polish on devices: tablets/landscape spread, soft keyboard for "go to page", edge-to-edge (target API 35)
+4. More mobile stealth: blurred recents thumbnail, optional screenshot block, two-finger tap veil
 5. Release signing (keystore in CI secrets) and the APK attached to GitHub Releases
