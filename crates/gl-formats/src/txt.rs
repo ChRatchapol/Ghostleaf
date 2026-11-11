@@ -58,7 +58,7 @@ fn heading_re() -> &'static Regex {
 
 impl TxtDoc {
     pub fn open(path: &Path) -> Result<Self, String> {
-        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let bytes = crate::read_all(path).map_err(|e| e.to_string())?;
         Ok(Self::from_text(crate::title_from_path(path), &decode::decode_text(&bytes)))
     }
 

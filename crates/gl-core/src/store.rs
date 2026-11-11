@@ -139,9 +139,33 @@ impl Store {
 
 /// Content-derived book id: BLAKE3 over the file size and its first and last 64 KiB.
 /// Fast on huge files, stable when a file is renamed or moved.
+/// Open a book file for reading.
+///
+/// On Android a picked document arrives as a granted descriptor exposed as
+/// `/proc/self/fd/N`. Re-opening that path is refused by the storage layer
+/// (the app holds no storage permission), so duplicate the descriptor instead.
+pub fn open_file(path: &Path) -> io::Result<fs::File> {
+    #[cfg(unix)]
+    if let Some(fd) = fd_of(path) {
+        use std::os::fd::BorrowedFd;
+        // SAFETY: the descriptor stays open for as long as the book is in use
+        // (it is closed only by the owner of the `/proc/self/fd/N` path).
+        let owned = unsafe { BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()?;
+        let mut f = fs::File::from(owned);
+        f.seek(SeekFrom::Start(0))?;
+        return Ok(f);
+    }
+    fs::File::open(path)
+}
+
+/// The descriptor number of a `/proc/self/fd/N` path.
+pub fn fd_of(path: &Path) -> Option<i32> {
+    path.to_str()?.strip_prefix("/proc/self/fd/")?.parse().ok()
+}
+
 pub fn book_id(path: &Path) -> io::Result<String> {
     const CHUNK: u64 = 64 * 1024;
-    let mut f = fs::File::open(path)?;
+    let mut f = open_file(path)?;
     let len = f.metadata()?.len();
     let mut h = blake3::Hasher::new();
     h.update(&len.to_le_bytes());
@@ -188,5 +212,21 @@ mod tests {
         assert_eq!(a, book_id(&p).unwrap());
         assert_eq!(a.len(), 20);
         let _ = fs::remove_file(p);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reads_through_descriptor_path() {
+        use std::io::Read;
+        use std::os::fd::AsRawFd;
+        let p = std::env::temp_dir().join("gl-fd-test.txt");
+        fs::write(&p, b"hello descriptor").unwrap();
+        let f = fs::File::open(&p).unwrap();
+        let fd_path = PathBuf::from(format!("/proc/self/fd/{}", f.as_raw_fd()));
+        assert_eq!(book_id(&fd_path).unwrap(), book_id(&p).unwrap());
+        let mut s = String::new();
+        open_file(&fd_path).unwrap().read_to_string(&mut s).unwrap();
+        assert_eq!(s, "hello descriptor");
+        let _ = fs::remove_file(&p);
     }
 }

@@ -67,7 +67,7 @@ fn visible_chars(s: &str) -> f32 {
 
 impl CsvDoc {
     pub fn open(path: &Path) -> Result<Self, String> {
-        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let bytes = crate::read_all(path).map_err(|e| e.to_string())?;
         let tsv = matches!(
             path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
             Some("tsv" | "tab")

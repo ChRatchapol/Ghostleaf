@@ -93,11 +93,19 @@ pub fn open_document(path: &Path) -> Result<Box<dyn Document>, String> {
     }
 }
 
+/// Read a whole book file (works for Android descriptor paths too).
+pub(crate) fn read_all(path: &Path) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut v = Vec::new();
+    gl_core::store::open_file(path)?.read_to_end(&mut v)?;
+    Ok(v)
+}
+
 /// Recognise a PDF without the right extension.
 fn sniff(path: &Path) -> Option<Format> {
     use std::io::Read;
     let mut b = [0u8; 5];
-    std::fs::File::open(path).ok()?.read_exact(&mut b).ok()?;
+    gl_core::store::open_file(path).ok()?.read_exact(&mut b).ok()?;
     (&b == b"%PDF-").then_some(Format::Pdf)
 }
 

@@ -104,7 +104,7 @@ impl GhostleafApp {
         let format = Format::from_path(&path).or_else(|| {
             let mut b = [0u8; 5];
             use std::io::Read;
-            std::fs::File::open(&path).ok()?.read_exact(&mut b).ok()?;
+            gl_core::store::open_file(&path).ok()?.read_exact(&mut b).ok()?;
             (&b == b"%PDF-").then_some(Format::Pdf)
         })?;
         let id = book_id(&path).ok()?;
@@ -316,7 +316,7 @@ impl GhostleafApp {
             std::fs::File::open(&path).ok()?.read_exact(&mut b).ok()?;
             (&b == b"%PDF-").then_some(Format::Pdf)
         });
-        let id = book_id(&path).ok();
+        let id = book_id(&path).map_err(|e| log::warn!("cannot read {name}: {e}")).ok();
         crate::android::close_path(&path);
         let (format, id) = (format?, id?);
         let title = gl_formats::title_from_path(Path::new(name));

@@ -62,7 +62,14 @@ pub struct PdfDoc {
 impl PdfDoc {
     pub fn open(path: &Path) -> Result<Self, String> {
         let pdfium = pdfium()?;
-        let doc = pdfium.load_pdf_from_file(path, None).map_err(|e| match e {
+        let loaded = if gl_core::store::fd_of(path).is_some() {
+            // Android document: read through the granted descriptor
+            let f = gl_core::store::open_file(path).map_err(|e| format!("Could not open PDF: {e}"))?;
+            pdfium.load_pdf_from_reader(f, None)
+        } else {
+            pdfium.load_pdf_from_file(path, None)
+        };
+        let doc = loaded.map_err(|e| match e {
             PdfiumError::PdfiumLibraryInternalError(PdfiumInternalError::PasswordError) => {
                 "This PDF is password-protected (not supported yet).".to_string()
             }
