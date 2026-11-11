@@ -19,6 +19,9 @@ pub struct Stealth {
     /// Ignore pointer-leave events until this time (e.g. right after a native file dialog).
     suppress_until: f64,
     hotkey: Option<BossKey>,
+    /// Touch input seen (phones, tablets, touchscreens): fingers lifting off the
+    /// screen also report "pointer gone", so leaving = leaving the app instead.
+    touch: bool,
     hotkey_rx: Option<Receiver<()>>,
 }
 
@@ -31,6 +34,7 @@ impl Stealth {
             minimized: false,
             suppress_until: 0.0,
             hotkey: None,
+            touch: cfg!(target_os = "android"),
             hotkey_rx: None,
         }
     }
@@ -88,7 +92,7 @@ impl Stealth {
         }
         self.hidden = true;
         self.pending_at = None;
-        if cfg.style == StealthStyle::Minimize {
+        if cfg.style == StealthStyle::Minimize && !self.touch {
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
             self.minimized = true;
         }
@@ -126,20 +130,40 @@ impl Stealth {
             }
             return self.hidden;
         }
-        let (gone, moved, clicked, focused, any_down) = ctx.input(|i| {
+        let (gone, moved, clicked, focused, any_down, touched) = ctx.input(|i| {
             let mut gone = false;
             let mut moved = false;
             let mut clicked = false;
+            let mut touched = false;
             for e in &i.events {
                 match e {
                     egui::Event::PointerGone => gone = true,
                     egui::Event::PointerMoved(_) => moved = true,
                     egui::Event::PointerButton { pressed: true, .. } => clicked = true,
+                    egui::Event::Touch {
+                        phase: egui::TouchPhase::Start,
+                        ..
+                    } => touched = true,
                     _ => {}
                 }
             }
-            (gone, moved, clicked, i.viewport().focused, i.pointer.any_down())
+            (gone, moved, clicked, i.viewport().focused, i.pointer.any_down(), touched)
         });
+        self.touch |= touched;
+        if self.touch {
+            // Touch: hide when the app goes to the background (or loses focus);
+            // when it comes back the page stays covered until you tap.
+            if self.hidden {
+                if !self.by_boss && (touched || clicked) && focused != Some(false) {
+                    self.reveal(ctx);
+                }
+                return self.hidden;
+            }
+            if focused == Some(false) && now >= self.suppress_until {
+                self.hide(ctx, cfg);
+            }
+            return self.hidden;
+        }
         if self.hidden {
             if self.by_boss {
                 return true;

@@ -101,6 +101,10 @@ pub struct Reader {
     wheel_acc: f32,
     pub cover: Option<RgbaImage>,
     chrome_until: f64,
+    /// Top bar pinned open by a tap in the middle of the page (touch has no hover).
+    chrome_pinned: bool,
+    /// Phone-sized layout this frame.
+    compact: bool,
     goto_text: String,
     font_list: Option<Vec<String>>,
     pending_action: Option<Action>,
@@ -195,6 +199,8 @@ impl Reader {
             wheel_acc: 0.0,
             cover: None,
             chrome_until: now + 2.5,
+            chrome_pinned: false,
+            compact: false,
             goto_text: String::new(),
             font_list: None,
             pending_action: None,
@@ -268,9 +274,10 @@ impl Reader {
     /// Page rectangles for a view: (first-in-reading-order, second). In single mode only the first.
     fn view_rects(&self, area: Rect, spread: bool, rtl: bool, view: usize, blank: bool) -> (Rect, Option<Rect>) {
         // pages sit below the (auto-hiding) top bar, so their top corners can always be grabbed
+        let pad = if self.compact { 8.0 } else { PAD };
         let inner = Rect::from_min_max(
-            Pos2::new(area.left() + PAD, area.top() + TOP_BAR_H + 6.0),
-            Pos2::new(area.right() - PAD, area.bottom() - PAD * 0.6),
+            Pos2::new(area.left() + pad, area.top() + TOP_BAR_H + 6.0),
+            Pos2::new(area.right() - pad, area.bottom() - pad * 0.6),
         );
         let base = if self.reflow {
             let per_w = if spread { inner.width() / 2.0 } else { inner.width() };
@@ -427,6 +434,7 @@ impl Reader {
                 None => return,
             },
         };
+        self.chrome_pinned = false;
         if style == TurnStyle::None {
             let v = if dir == Dir::Fwd { to } else { from };
             self.set_view(v, env, blank);
@@ -475,12 +483,26 @@ impl Reader {
             self.requested.clear();
         }
         let mut action = Action::None;
+        self.compact = style::compact(&ctx);
+        // Android back button (and Escape for panels): close what's open, else go back to the library.
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::BrowserBack)) {
+            if self.panel.is_some() {
+                self.panel = None;
+            } else if self.chrome_pinned {
+                self.chrome_pinned = false;
+            } else {
+                return Action::Close;
+            }
+        }
+        if self.panel.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.panel = None;
+        }
 
         // side panel
         if let Some(panel) = self.panel {
             egui::Panel::right("reader-side")
                 .resizable(false)
-                .exact_size(280.0)
+                .exact_size(280.0_f32.min(ctx.content_rect().width() * 0.86))
                 .frame(egui::Frame::new().fill(env.pal.panel).inner_margin(egui::Margin::same(16)))
                 .show(ui, |ui| self.side_panel(ui, panel, env));
         }
@@ -662,7 +684,8 @@ impl Reader {
             } else if rel < 0.38 {
                 self.start_auto(left_dir, spread, blank, style, now, fw, fh, env);
             } else {
-                self.chrome_until = now + 3.0;
+                self.chrome_pinned = !self.chrome_pinned;
+                self.chrome_until = 0.0;
             }
         }
         // keyboard & wheel
@@ -862,7 +885,7 @@ impl Reader {
             .input(|i| i.pointer.hover_pos())
             .map(|p| p.y < area.top() + TOP_BAR_H)
             .unwrap_or(false);
-        let show = hover_top || now < self.chrome_until || self.panel.is_some() || egui::Popup::is_any_open(&ctx);
+        let show = hover_top || self.chrome_pinned || now < self.chrome_until || self.panel.is_some() || egui::Popup::is_any_open(&ctx);
         if show && self.top_bar(ui, area, env, false) {
             action = Action::Close;
         }
@@ -1012,6 +1035,27 @@ impl Reader {
                         if crate::icons::button(ui, crate::icons::Icon::Back, false, env.t.library).clicked() {
                             back = true;
                         }
+                        if self.compact && !minimal {
+                            // phone: back · title · page · ⋯ (everything else lives in the menu)
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let r = crate::icons::button(ui, crate::icons::Icon::More, false, env.t.more);
+                                egui::Popup::menu(&r)
+                                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                                    .show(|ui| self.compact_menu(ui, env));
+                                let blank = Self::blank(env.book, env.settings);
+                                let total = self.page_count();
+                                let page = self.current_page(blank);
+                                ui.label(
+                                    egui::RichText::new(format!("{} / {}", (page + 1).min(total.max(1)), total))
+                                        .color(env.pal.muted)
+                                        .small(),
+                                );
+                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                    ui.add(egui::Label::new(egui::RichText::new(&self.title).font(style::semibold(14.0))).truncate());
+                                });
+                            });
+                            return;
+                        }
                         ui.add(egui::Label::new(egui::RichText::new(&self.title).font(style::semibold(14.0))).truncate());
                         if minimal {
                             return;
@@ -1021,6 +1065,92 @@ impl Reader {
                 );
             });
         back
+    }
+
+    /// Phone menu: every reading control, with labels, in one popup.
+    fn compact_menu(&mut self, ui: &mut egui::Ui, env: &mut Env) {
+        use crate::icons::{Icon, button as icon};
+        let t = env.t;
+        let blank = Self::blank(env.book, env.settings);
+        ui.set_min_width(250.0);
+        ui.horizontal(|ui| {
+            if icon(ui, Icon::Contents, false, t.contents).clicked() {
+                self.panel = Some(SidePanel::Contents);
+                ui.close();
+            }
+            let page = self.current_page(blank);
+            let marked = env.book.bookmarks.iter().any(|b| self.page_of(b.location) == page);
+            if icon(
+                ui,
+                if marked { Icon::BookmarkFilled } else { Icon::Bookmark },
+                false,
+                t.add_bookmark,
+            )
+            .clicked()
+            {
+                self.toggle_bookmark(env, blank);
+            }
+            if icon(ui, if env.settings.sound { Icon::SoundOn } else { Icon::SoundOff }, false, t.sound).clicked() {
+                env.settings.sound = !env.settings.sound;
+                *env.settings_dirty = true;
+            }
+            if icon(ui, Icon::Theme, false, t.theme).clicked() {
+                let all = Theme::ALL;
+                let i = all.iter().position(|x| *x == env.settings.theme).unwrap_or(0);
+                env.settings.theme = all[(i + 1) % all.len()];
+                *env.settings_dirty = true;
+            }
+            if icon(ui, Icon::Settings, false, t.settings).clicked() {
+                self.pending_action = Some(Action::OpenSettings);
+                ui.close();
+            }
+        });
+        ui.separator();
+        ui.label(egui::RichText::new(t.page_turn).small());
+        ui.horizontal_wrapped(|ui| {
+            for (v, l) in [(TurnStyle::Curl, t.curl), (TurnStyle::Slide, t.slide), (TurnStyle::None, t.none)] {
+                if ui.selectable_value(&mut env.settings.turn_style, v, l).changed() {
+                    *env.settings_dirty = true;
+                }
+            }
+        });
+        ui.label(egui::RichText::new(t.display).small());
+        ui.horizontal_wrapped(|ui| {
+            for (v, l) in [
+                (DisplayMode::Single, t.single),
+                (DisplayMode::Spread, t.spread),
+                (DisplayMode::Auto, t.auto),
+            ] {
+                if ui.selectable_value(&mut env.settings.display, v, l).changed() {
+                    *env.settings_dirty = true;
+                }
+            }
+        });
+        let rtl = Self::rtl(env.book, env.settings);
+        ui.horizontal_wrapped(|ui| {
+            if ui.selectable_label(!rtl, t.ltr).clicked() && rtl {
+                env.book.rtl = Some(false);
+                *env.library_dirty = true;
+            }
+            if ui.selectable_label(rtl, t.rtl).clicked() && !rtl {
+                env.book.rtl = Some(true);
+                *env.library_dirty = true;
+            }
+        });
+        let mut b = blank;
+        if ui.checkbox(&mut b, t.first_blank).changed() {
+            env.book.first_blank = Some(b);
+            *env.library_dirty = true;
+        }
+        if self.reflow {
+            ui.separator();
+            ui.collapsing(t.typography, |ui| {
+                let fonts = self.font_list.get_or_insert_with(gl_formats::engine::font_families).clone();
+                if crate::panels::typography(ui, env.settings, t, &fonts) {
+                    *env.settings_dirty = true;
+                }
+            });
+        }
     }
 
     fn bar_controls(&mut self, ui: &mut egui::Ui, env: &mut Env) {

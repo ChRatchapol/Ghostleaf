@@ -249,6 +249,16 @@ impl eframe::App for GhostleafApp {
         let hidden = self.stealth.update(&ctx, &self.settings.stealth);
         self.sync_window(&ctx, frame, hidden);
 
+        // Back button (Android) / Escape: close an open window first.
+        if (self.show_settings || self.show_privacy)
+            && ctx.input_mut(|i| {
+                i.consume_key(egui::Modifiers::NONE, egui::Key::BrowserBack) || i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
+            })
+        {
+            self.show_settings = false;
+            self.show_privacy = false;
+        }
+
         // screens
         let mut close_reader = false;
         if let Some(reader) = &mut self.reader {

@@ -56,12 +56,13 @@ pub fn typography(ui: &mut egui::Ui, s: &mut Settings, t: &Tr, fonts: &[String])
 
 fn theme_chips(ui: &mut egui::Ui, s: &mut Settings, t: &Tr) -> bool {
     let mut ch = false;
-    for row in Theme::ALL.chunks(4) {
-        ui.horizontal(|ui| {
-            for th in row {
+    let chip_w = if style::compact(ui.ctx()) { 72.0 } else { 96.0 };
+    {
+        ui.horizontal_wrapped(|ui| {
+            for th in Theme::ALL.iter() {
                 let p = style::palette_of(*th, &s.custom_theme);
                 let selected = s.theme == *th;
-                let (rect, r) = ui.allocate_exact_size(egui::vec2(96.0, 54.0), egui::Sense::click());
+                let (rect, r) = ui.allocate_exact_size(egui::vec2(chip_w, 54.0), egui::Sense::click());
                 let painter = ui.painter();
                 painter.rect_filled(rect, 10.0, p.paper);
                 if *th == Theme::Custom {
@@ -123,12 +124,13 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
     let mut ch = false;
     let mut keep = *open;
     let max_h = (ctx.content_rect().height() - 120.0).max(240.0);
+    let win_w = SETTINGS_W.min(ctx.content_rect().width() - 16.0);
     egui::Window::new(t.settings)
         .open(&mut keep)
         .collapsible(false)
         .resizable(false)
-        .min_width(SETTINGS_W)
-        .max_width(SETTINGS_W)
+        .min_width(win_w)
+        .max_width(win_w)
         .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
         .show(ctx, |ui| {
             egui::ScrollArea::vertical()
@@ -136,21 +138,24 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
                 .max_height(max_h)
                 .min_scrolled_height(max_h.min(640.0))
                 .show(ui, |ui| {
-                    ui.set_width(SETTINGS_W - 18.0);
+                    ui.set_width(win_w - 18.0);
+                    if style::compact(ctx) {
+                        ui.spacing_mut().slider_width = 120.0;
+                    }
                     section(ui, t.theme);
                     ch |= theme_chips(ui, s, t);
 
                     section(ui, t.reading);
                     egui::Grid::new("reading").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                         ui.label(t.page_turn);
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             for (v, l) in [(TurnStyle::Curl, t.curl), (TurnStyle::Slide, t.slide), (TurnStyle::None, t.none)] {
                                 ch |= ui.selectable_value(&mut s.turn_style, v, l).changed();
                             }
                         });
                         ui.end_row();
                         ui.label(t.display);
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             for (v, l) in [
                                 (DisplayMode::Single, t.single),
                                 (DisplayMode::Spread, t.spread),
@@ -161,7 +166,7 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
                         });
                         ui.end_row();
                         ui.label(t.sound);
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ch |= ui.checkbox(&mut s.sound, "").changed();
                             ch |= ui
                                 .add_enabled(s.sound, egui::Slider::new(&mut s.volume, 0.0..=1.0).show_value(false))
@@ -172,7 +177,7 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
                     ch |= ui.checkbox(&mut s.pdf_dark_invert, t.pdf_dark).changed();
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new(t.defaults_new_books).small());
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ch |= ui.checkbox(&mut s.default_first_blank, t.first_blank).changed();
                         ch |= ui.checkbox(&mut s.default_rtl, t.rtl).changed();
                     });
@@ -183,16 +188,30 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
 
                     section(ui, t.stealth);
                     let st = &mut s.stealth;
-                    ch |= ui.checkbox(&mut st.enabled, t.stealth_enabled).changed();
+                    ch |= ui
+                        .checkbox(
+                            &mut st.enabled,
+                            if cfg!(target_os = "android") {
+                                t.stealth_enabled_touch
+                            } else {
+                                t.stealth_enabled
+                            },
+                        )
+                        .changed();
                     ui.add_enabled_ui(st.enabled, |ui| {
                         egui::Grid::new("stealth").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                             ui.label(t.stealth_style);
-                            ui.horizontal(|ui| {
-                                for (v, l) in [
-                                    (StealthStyle::Veil, t.veil),
-                                    (StealthStyle::Decoy, t.decoy),
-                                    (StealthStyle::Minimize, t.minimize),
-                                ] {
+                            ui.horizontal_wrapped(|ui| {
+                                let styles: &[(StealthStyle, &str)] = if cfg!(target_os = "android") {
+                                    &[(StealthStyle::Veil, t.veil), (StealthStyle::Decoy, t.decoy)]
+                                } else {
+                                    &[
+                                        (StealthStyle::Veil, t.veil),
+                                        (StealthStyle::Decoy, t.decoy),
+                                        (StealthStyle::Minimize, t.minimize),
+                                    ]
+                                };
+                                for &(v, l) in styles {
                                     ch |= ui.selectable_value(&mut st.style, v, l).changed();
                                 }
                             });
@@ -205,25 +224,17 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
                         });
                         ch |= ui.checkbox(&mut st.reveal_on_click, t.reveal_click).changed();
                         ch |= ui.checkbox(&mut st.on_focus_loss, t.on_focus_loss).changed();
-                        ch |= ui.checkbox(&mut st.neutral_title, t.neutral_title).changed();
-                    });
-                    ch |= ui.checkbox(&mut st.boss_key, t.boss_key).changed();
-
-                    section(ui, t.window);
-                    ui.horizontal(|ui| {
-                        ui.label(t.title_bar);
-                        for (v, l) in [
-                            (TitleBar::Theme, t.tb_theme),
-                            (TitleBar::System, t.tb_system),
-                            (TitleBar::Hidden, t.tb_hidden),
-                        ] {
-                            ch |= ui.selectable_value(&mut s.title_bar, v, l).changed();
+                        if !cfg!(target_os = "android") {
+                            ch |= ui.checkbox(&mut st.neutral_title, t.neutral_title).changed();
                         }
                     });
-                    ch |= ui.checkbox(&mut s.always_on_top, t.always_on_top).changed();
+                    if !cfg!(target_os = "android") {
+                        ch |= ui.checkbox(&mut st.boss_key, t.boss_key).changed();
+                        ch |= window_section(ui, s, t);
+                    }
 
                     section(ui, t.language);
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         for (v, l) in [
                             (Language::Auto, t.lang_auto),
                             (Language::English, "English"),
@@ -236,6 +247,24 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
                 });
         });
     *open = keep;
+    ch
+}
+
+/// Desktop-only window options.
+fn window_section(ui: &mut egui::Ui, s: &mut Settings, t: &Tr) -> bool {
+    let mut ch = false;
+    section(ui, t.window);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(t.title_bar);
+        for (v, l) in [
+            (TitleBar::Theme, t.tb_theme),
+            (TitleBar::System, t.tb_system),
+            (TitleBar::Hidden, t.tb_hidden),
+        ] {
+            ch |= ui.selectable_value(&mut s.title_bar, v, l).changed();
+        }
+    });
+    ch |= ui.checkbox(&mut s.always_on_top, t.always_on_top).changed();
     ch
 }
 
@@ -272,7 +301,8 @@ pub fn privacy_window(
         .open(&mut keep)
         .collapsible(false)
         .resizable(false)
-        .default_width(480.0)
+        .min_width(480.0_f32.min(ctx.content_rect().width() - 16.0))
+        .max_width(480.0_f32.min(ctx.content_rect().width() - 16.0))
         .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
         .show(ctx, |ui| {
             ui.label(t.privacy_intro);
@@ -281,7 +311,7 @@ pub fn privacy_window(
                 ui.label(egui::RichText::new(t.privacy_network).color(pal.ink));
             });
             section(ui, t.data_folder);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.add(egui::Label::new(egui::RichText::new(store.root().display().to_string()).monospace().size(12.0)).truncate());
                 #[cfg(not(target_os = "android"))]
                 if ui.button(t.open_folder).clicked() {
@@ -317,7 +347,7 @@ pub fn privacy_window(
                 act = PrivacyAction::SettingsChanged;
             }
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button(t.clear_covers).clicked() {
                     act = PrivacyAction::ClearCovers;
                 }

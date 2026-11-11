@@ -20,7 +20,9 @@ android {
     defaultConfig {
         applicationId = "app.ghostleaf"
         minSdk = 26
-        targetSdk = 35
+        // 34, not 35: Android 15 forces apps targeting 35 to draw under the status
+        // and navigation bars, and egui can't read those insets on Android yet.
+        targetSdk = 34
         versionCode = versionCodeFromCargo
         versionName = versionFromCargo
         ndk { abiFilters += listOf("arm64-v8a") }

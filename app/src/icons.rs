@@ -23,6 +23,8 @@ pub enum Icon {
     AutoSpread,
     Close,
     Text,
+    More,
+    Privacy,
 }
 
 pub fn draw(p: &Painter, r: Rect, icon: Icon, c: Color32) {
@@ -150,6 +152,24 @@ pub fn draw(p: &Painter, r: Rect, icon: Icon, c: Color32) {
                 2.0 * u,
                 1.6 * u,
             ));
+        }
+        Icon::More => {
+            for x in [5.0, 10.0, 15.0] {
+                p.circle_filled(at(x, 10.0), 1.5 * u, c);
+            }
+        }
+        Icon::Privacy => {
+            // a small shield
+            line(&[
+                (10.0, 3.0),
+                (16.0, 5.5),
+                (16.0, 10.0),
+                (10.0, 17.0),
+                (4.0, 10.0),
+                (4.0, 5.5),
+                (10.0, 3.0),
+            ]);
+            line(&[(7.5, 10.0), (9.5, 12.0), (12.8, 8.0)]);
         }
         Icon::Text => {
             p.text(

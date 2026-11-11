@@ -45,7 +45,7 @@ impl Covers {
 }
 
 const CARD_W: f32 = 148.0;
-const COVER_H: f32 = 206.0;
+const COVER_RATIO: f32 = 206.0 / 148.0;
 
 fn cover_tone(title: &str, pal: Palette) -> Color32 {
     let h = title.bytes().fold(7u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32));
@@ -85,30 +85,48 @@ fn draw_generated_cover(painter: &egui::Painter, rect: Rect, book: &BookEntry, p
     );
 }
 
-fn header(ui: &mut egui::Ui, t: &Tr, pal: Palette, act: &mut LibAction, frameless: bool) {
+fn header(ui: &mut egui::Ui, t: &Tr, pal: Palette, act: &mut LibAction, frameless: bool, compact: bool) {
+    use crate::icons::{Icon, button as icon};
     ui.horizontal(|ui| {
-        let (r, _) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::hover());
+        let logo = if compact { 24.0 } else { 30.0 };
+        let (r, _) = ui.allocate_exact_size(Vec2::splat(logo), Sense::hover());
         style::draw_logo(ui.painter(), r, pal.ink);
         ui.add_space(2.0);
-        ui.label(egui::RichText::new("ghostleaf").font(style::wordmark_font(28.0)).color(pal.ink));
+        ui.label(
+            egui::RichText::new("ghostleaf")
+                .font(style::wordmark_font(if compact { 22.0 } else { 28.0 }))
+                .color(pal.ink),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if frameless {
                 crate::titlebar::window_controls(ui, pal);
                 ui.add_space(10.0);
             }
-            let open = egui::Button::new(egui::RichText::new(t.open).color(pal.paper).font(style::semibold(14.0)))
-                .fill(pal.ink)
-                .corner_radius(CornerRadius::same(18))
-                .min_size(Vec2::new(0.0, 34.0));
-            if ui.add(open).clicked() {
-                *act = LibAction::OpenDialog;
+            // Android: the system file picker arrives in phase 2 (see the hint below the header).
+            if !cfg!(target_os = "android") {
+                let open = egui::Button::new(egui::RichText::new(t.open).color(pal.paper).font(style::semibold(14.0)))
+                    .fill(pal.ink)
+                    .corner_radius(CornerRadius::same(18))
+                    .min_size(Vec2::new(0.0, 34.0));
+                if ui.add(open).clicked() {
+                    *act = LibAction::OpenDialog;
+                }
+                ui.add_space(6.0);
             }
-            ui.add_space(6.0);
-            if ui.add(egui::Button::new(t.settings).frame(false)).clicked() {
-                *act = LibAction::Settings;
-            }
-            if ui.add(egui::Button::new(t.privacy).frame(false)).clicked() {
-                *act = LibAction::Privacy;
+            if compact {
+                if icon(ui, Icon::Settings, false, t.settings).clicked() {
+                    *act = LibAction::Settings;
+                }
+                if icon(ui, Icon::Privacy, false, t.privacy).clicked() {
+                    *act = LibAction::Privacy;
+                }
+            } else {
+                if ui.add(egui::Button::new(t.settings).frame(false)).clicked() {
+                    *act = LibAction::Settings;
+                }
+                if ui.add(egui::Button::new(t.privacy).frame(false)).clicked() {
+                    *act = LibAction::Privacy;
+                }
             }
         });
     });
@@ -131,8 +149,18 @@ pub fn library_ui(
         let bar = Rect::from_min_size(full.min, Vec2::new(full.width(), 92.0));
         crate::titlebar::drag_area(ui, bar, egui::Id::unique("library-drag"));
     }
-    egui::Frame::new().inner_margin(egui::Margin::symmetric(40, 28)).show(ui, |ui| {
-        header(ui, t, pal, &mut act, frameless);
+    let compact = style::compact(&ctx);
+    let margin = if compact {
+        egui::Margin::symmetric(16, 14)
+    } else {
+        egui::Margin::symmetric(40, 28)
+    };
+    egui::Frame::new().inner_margin(margin).show(ui, |ui| {
+        header(ui, t, pal, &mut act, frameless, compact);
+        if cfg!(target_os = "android") && lib.books.is_empty() {
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new(t.books_folder_hint).small().color(pal.muted));
+        }
         ui.add_space(26.0);
 
         if lib.books.is_empty() {
@@ -159,15 +187,18 @@ pub fn library_ui(
 
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             let width = ui.available_width();
-            let gap = 28.0;
-            let cols = ((width + gap) / (CARD_W + gap)).floor().max(1.0) as usize;
+            let gap = if compact { 16.0 } else { 28.0 };
+            // at least two columns on phones; cards shrink to fit
+            let card_w = CARD_W.min(((width - gap) / 2.0).floor()).max(96.0);
+            let cover_h = (card_w * COVER_RATIO).round();
+            let cols = ((width + gap) / (card_w + gap)).floor().max(1.0) as usize;
             let books = lib.sorted_recent();
             for row in books.chunks(cols) {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
                     for book in row {
-                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(CARD_W, COVER_H + 58.0), Sense::click());
-                        let cover = Rect::from_min_size(rect.min, Vec2::new(CARD_W, COVER_H));
+                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, cover_h + 58.0), Sense::click());
+                        let cover = Rect::from_min_size(rect.min, Vec2::new(card_w, cover_h));
                         let painter = ui.painter();
                         let missing = !book.path.exists();
                         let lift = if resp.hovered() { -3.0 } else { 0.0 };
@@ -201,9 +232,9 @@ pub fn library_ui(
                                 egui::Stroke::new(2.0, pal.ink),
                             );
                         }
-                        let tg = painter.layout(book.title.clone(), style::semibold(13.0), pal.ink, CARD_W);
+                        let tg = painter.layout(book.title.clone(), style::semibold(13.0), pal.ink, card_w);
                         let tg = if tg.rows.len() > 2 {
-                            let mut job = egui::text::LayoutJob::simple(book.title.clone(), style::semibold(13.0), pal.ink, CARD_W);
+                            let mut job = egui::text::LayoutJob::simple(book.title.clone(), style::semibold(13.0), pal.ink, card_w);
                             job.wrap.max_rows = 2;
                             ui.fonts_mut(|f| f.layout_job(job))
                         } else {

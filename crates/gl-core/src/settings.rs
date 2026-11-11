@@ -121,7 +121,7 @@ impl Default for Stealth {
             enabled: true,
             on_focus_loss: false,
             style: StealthStyle::Veil,
-            hide_delay_ms: 0,
+            hide_delay_ms: 300,
             reveal_on_click: false,
             boss_key: true,
             neutral_title: true,

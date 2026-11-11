@@ -49,6 +49,7 @@ pub struct Tr {
     pub display: &'static str,
     pub stealth: &'static str,
     pub stealth_enabled: &'static str,
+    pub stealth_enabled_touch: &'static str,
     pub stealth_style: &'static str,
     pub veil: &'static str,
     pub decoy: &'static str,
@@ -83,6 +84,8 @@ pub struct Tr {
     pub file_missing: &'static str,
     pub reveal_hint: &'static str,
     pub go_to_page: &'static str,
+    pub more: &'static str,
+    pub books_folder_hint: &'static str,
 }
 
 pub const EN: Tr = Tr {
@@ -132,6 +135,7 @@ pub const EN: Tr = Tr {
     display: "Pages",
     stealth: "Stealth",
     stealth_enabled: "Hide when the mouse leaves the window",
+    stealth_enabled_touch: "Cover the page when you leave the app; tap to continue",
     stealth_style: "How to hide",
     veil: "Veil",
     decoy: "Decoy",
@@ -166,6 +170,8 @@ pub const EN: Tr = Tr {
     file_missing: "File not found. It may have been moved or deleted.",
     reveal_hint: "Move the mouse here to continue",
     go_to_page: "Go to page",
+    more: "More",
+    books_folder_hint: "Copy PDF, TXT or CSV files into Android/data/app.ghostleaf/files/Books (over USB from a computer), then reopen Ghostleaf. A file picker is coming next.",
 };
 
 pub const TH: Tr = Tr {
@@ -215,6 +221,7 @@ pub const TH: Tr = Tr {
     display: "การแสดงหน้า",
     stealth: "โหมดซ่อน",
     stealth_enabled: "ซ่อนเมื่อเมาส์ออกนอกหน้าต่าง",
+    stealth_enabled_touch: "ปิดหน้ากระดาษเมื่อออกจากแอป แตะเพื่ออ่านต่อ",
     stealth_style: "วิธีซ่อน",
     veil: "ปิดทับ",
     decoy: "หน้าจอหลอก",
@@ -249,6 +256,8 @@ pub const TH: Tr = Tr {
     file_missing: "ไม่พบไฟล์ อาจถูกย้ายหรือลบไปแล้ว",
     reveal_hint: "เลื่อนเมาส์มาที่นี่เพื่ออ่านต่อ",
     go_to_page: "ไปที่หน้า",
+    more: "เพิ่มเติม",
+    books_folder_hint: "คัดลอกไฟล์ PDF, TXT หรือ CSV ไปไว้ที่ Android/data/app.ghostleaf/files/Books (ผ่าน USB จากคอมพิวเตอร์) แล้วเปิด Ghostleaf ใหม่ ตัวเลือกไฟล์จะมาในเวอร์ชันถัดไป",
 };
 
 pub fn system_is_thai() -> bool {

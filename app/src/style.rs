@@ -266,6 +266,11 @@ pub fn apply(ctx: &egui::Context, p: Palette) {
     });
 }
 
+/// Phone-sized window (or a narrow desktop window): use the compact layout.
+pub fn compact(ctx: &egui::Context) -> bool {
+    ctx.content_rect().width() < 640.0
+}
+
 pub fn wordmark_font(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(WORDMARK.into()))
 }
