@@ -1,0 +1,61 @@
+# cargo-deny configuration — `cargo deny check bans licenses`
+#
+# Ghostleaf promises "no network". This file enforces it: CI fails if any
+# HTTP / TLS / socket / telemetry crate enters the dependency tree.
+
+[graph]
+all-features = false
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+deny = [
+    { crate = "reqwest" },
+    { crate = "hyper" },
+    { crate = "hyper-util" },
+    { crate = "h2" },
+    { crate = "h3" },
+    { crate = "ureq" },
+    { crate = "curl" },
+    { crate = "curl-sys" },
+    { crate = "isahc" },
+    { crate = "surf" },
+    { crate = "attohttpc" },
+    { crate = "minreq" },
+    { crate = "rustls" },
+    { crate = "native-tls" },
+    { crate = "openssl" },
+    { crate = "openssl-sys" },
+    { crate = "tokio" },
+    { crate = "async-std" },
+    { crate = "mio" },
+    { crate = "socket2" },
+    { crate = "tungstenite" },
+    { crate = "quinn" },
+    { crate = "sentry" },
+    { crate = "opentelemetry" },
+    { crate = "posthog-rs" },
+    { crate = "self_update" },
+]
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "BSL-1.0",
+    "OFL-1.1",
+    "MPL-2.0",
+    "0BSD",
+    "Unlicense",
+    "CDLA-Permissive-2.0",
+]

@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/gl-core", "crates/gl-formats", "crates/gl-curl", "app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ChRatchapol/Ghostleaf"
+rust-version = "1.88"
+
+[workspace.dependencies]
+gl-core = { path = "crates/gl-core" }
+gl-formats = { path = "crates/gl-formats" }
+gl-curl = { path = "crates/gl-curl" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+needless_range_loop = "allow"
+wrong_self_convention = "allow"
+field_reassign_with_default = "allow"

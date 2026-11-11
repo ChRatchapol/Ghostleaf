@@ -1,0 +1,35 @@
+[package]
+name = "ghostleaf"
+description = "Ghostleaf — a private, offline e-reader with stealth reading and realistic page curl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "ghostleaf"
+path = "src/main.rs"
+
+[dependencies]
+gl-core.workspace = true
+gl-formats.workspace = true
+gl-curl.workspace = true
+serde.workspace = true
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "glow", "wayland", "x11"] }
+egui = "0.37"
+rfd = "0.18"
+rodio = { version = "0.23", default-features = false, features = ["playback"] }
+global-hotkey = "0.10"
+image = { version = "0.25", default-features = false, features = ["png"] }
+sys-locale = "0.3"
+opener = "0.9"
+raw-window-handle = "0.6"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Graphics_Dwm", "Win32_Foundation"] }
+
+[build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true

@@ -1,0 +1,28 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# PDFium binaries are fetched by scripts/fetch-pdfium.* (keep the licence files)
+/vendor/pdfium/*/
+!/vendor/pdfium/licenses/
+
+# Packaging output
+/dist/
+
+# Local app data (portable mode) and temp files
+ghostleaf-data/
+portable.flag
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Recorded page sounds (Sonniss GDC bundle): licensed for use inside the app,
+# not for redistribution as raw files. Generate locally: scripts/prepare-sounds.py
+/app/assets/sounds/*.wav
+/app/assets/sounds/candidates/

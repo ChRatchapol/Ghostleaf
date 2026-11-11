@@ -1,0 +1,11 @@
+[package]
+name = "gl-curl"
+description = "Ghostleaf page-curl geometry and spring physics (renderer-agnostic)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

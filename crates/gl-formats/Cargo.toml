@@ -1,0 +1,22 @@
+[package]
+name = "gl-formats"
+description = "Ghostleaf document formats: PDF, TXT, CSV with pagination and page rasterization"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+gl-core.workspace = true
+pdfium-render = { version = "0.9", default-features = false, features = ["pdfium_latest", "thread_safe"] }
+cosmic-text = "0.19"
+csv = "1"
+encoding_rs = "0.8"
+chardetng = "1"
+icu_segmenter = "2"
+regex = "1"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[lints]
+workspace = true
