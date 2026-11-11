@@ -25,6 +25,8 @@ pub enum Icon {
     Text,
     More,
     Privacy,
+    ChevronDown,
+    ChevronUp,
 }
 
 pub fn draw(p: &Painter, r: Rect, icon: Icon, c: Color32) {
@@ -153,6 +155,8 @@ pub fn draw(p: &Painter, r: Rect, icon: Icon, c: Color32) {
                 1.6 * u,
             ));
         }
+        Icon::ChevronDown => line(&[(5.0, 7.5), (10.0, 12.5), (15.0, 7.5)]),
+        Icon::ChevronUp => line(&[(5.0, 12.5), (10.0, 7.5), (15.0, 12.5)]),
         Icon::More => {
             for x in [5.0, 10.0, 15.0] {
                 p.circle_filled(at(x, 10.0), 1.5 * u, c);

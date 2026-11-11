@@ -434,7 +434,6 @@ impl Reader {
                 None => return,
             },
         };
-        self.chrome_pinned = false;
         if style == TurnStyle::None {
             let v = if dir == Dir::Fwd { to } else { from };
             self.set_view(v, env, blank);
@@ -588,7 +587,17 @@ impl Reader {
         let k = if spread { 1.0 } else { 2.0 };
 
         // ---- input ----
-        let resp = ui.interact(area, ui.scope_id().with("pages"), Sense::click_and_drag());
+        // The top strip belongs to the bar (or its handle): never starts a page turn.
+        // While a menu is open, a tap outside only closes it.
+        let strip = Rect::from_min_size(area.min, Vec2::new(area.width(), TOP_BAR_H));
+        let pages_rect = Rect::from_min_max(Pos2::new(area.left(), strip.bottom()), area.max);
+        let menu_open = egui::Popup::is_any_open(&ctx);
+        let sense = if menu_open { Sense::hover() } else { Sense::click_and_drag() };
+        let resp = ui.interact(pages_rect, ui.scope_id().with("pages"), sense);
+        let strip_resp = ui.interact(strip, ui.scope_id().with("strip"), Sense::click());
+        if strip_resp.clicked() {
+            self.chrome_pinned = true;
+        }
         let style = env.settings.turn_style;
         if resp.drag_started()
             && self.turn.is_none()
@@ -889,6 +898,19 @@ impl Reader {
         if show && self.top_bar(ui, area, env, false) {
             action = Action::Close;
         }
+        if !show {
+            // a small tab that brings the bar back (tapping anywhere in the strip works too)
+            let c = env.pal.muted;
+            let tab = Rect::from_center_size(Pos2::new(area.center().x, area.top() + 14.0), Vec2::new(44.0, 20.0));
+            ui.painter().rect_filled(tab, 10.0, env.pal.panel.gamma_multiply(0.85));
+            crate::icons::draw(
+                ui.painter(),
+                Rect::from_center_size(tab.center(), Vec2::splat(18.0)),
+                crate::icons::Icon::ChevronDown,
+                c,
+            );
+            strip_resp.on_hover_text(env.t.show_controls);
+        }
         if show {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
             if let Some(a) = self.pending_action.take() {
@@ -1038,6 +1060,10 @@ impl Reader {
                         if self.compact && !minimal {
                             // phone: back · title · page · ⋯ (everything else lives in the menu)
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if crate::icons::button(ui, crate::icons::Icon::ChevronUp, false, env.t.hide_controls).clicked() {
+                                    self.chrome_pinned = false;
+                                    self.chrome_until = 0.0;
+                                }
                                 let r = crate::icons::button(ui, crate::icons::Icon::More, false, env.t.more);
                                 egui::Popup::menu(&r)
                                     .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
@@ -1060,7 +1086,15 @@ impl Reader {
                         if minimal {
                             return;
                         }
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.bar_controls(ui, env));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            self.bar_controls(ui, env);
+                            if self.chrome_pinned
+                                && crate::icons::button(ui, crate::icons::Icon::ChevronUp, false, env.t.hide_controls).clicked()
+                            {
+                                self.chrome_pinned = false;
+                                self.chrome_until = 0.0;
+                            }
+                        });
                     },
                 );
             });
