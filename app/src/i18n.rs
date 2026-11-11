@@ -84,6 +84,8 @@ pub struct Tr {
     pub file_missing: &'static str,
     pub reveal_hint: &'static str,
     pub go_to_page: &'static str,
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub cannot_open: &'static str,
     pub more: &'static str,
 }
 
@@ -169,6 +171,7 @@ pub const EN: Tr = Tr {
     file_missing: "File not found. It may have been moved or deleted.",
     reveal_hint: "Move the mouse here to continue",
     go_to_page: "Go to page",
+    cannot_open: "Couldn't open: only PDF, TXT and CSV files are supported",
     more: "More",
 };
 
@@ -254,6 +257,7 @@ pub const TH: Tr = Tr {
     file_missing: "ไม่พบไฟล์ อาจถูกย้ายหรือลบไปแล้ว",
     reveal_hint: "เลื่อนเมาส์มาที่นี่เพื่ออ่านต่อ",
     go_to_page: "ไปที่หน้า",
+    cannot_open: "เปิดไม่ได้: รองรับเฉพาะไฟล์ PDF, TXT และ CSV",
     more: "เพิ่มเติม",
 };
 

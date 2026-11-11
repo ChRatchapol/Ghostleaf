@@ -29,6 +29,9 @@ fn with_activity<T>(f: impl FnOnce(&mut jni::JNIEnv, &JObject) -> jni::errors::R
         let _ = env.exception_describe();
         let _ = env.exception_clear();
     }
+    if let Err(e) = &out {
+        log::warn!("JNI call failed: {e}");
+    }
     out.ok()
 }
 
@@ -72,6 +75,9 @@ pub fn open_uri(uri: &str) -> Option<PathBuf> {
         let s = env.new_string(uri)?;
         env.call_method(a, "openFd", "(Ljava/lang/String;)I", &[JValue::Object(&s)])?.i()
     })?;
+    if fd < 0 {
+        log::warn!("could not open {uri}");
+    }
     (fd >= 0).then(|| PathBuf::from(format!("/proc/self/fd/{fd}")))
 }
 

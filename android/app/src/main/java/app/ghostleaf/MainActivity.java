@@ -29,10 +29,7 @@ import java.util.ArrayList;
  */
 public class MainActivity extends NativeActivity {
     private static final int PICK_DOCUMENTS = 4711;
-    private static final String[] MIME_TYPES = {
-        "application/pdf", "text/plain", "text/csv", "text/comma-separated-values",
-        "text/tab-separated-values", "application/csv", "text/markdown",
-    };
+    
 
     /** "uri\nname" entries waiting for the native side. */
     private final ArrayList<String> pending = new ArrayList<>();
@@ -72,8 +69,9 @@ public class MainActivity extends NativeActivity {
         runOnUiThread(() -> {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
+            // all files: some providers label .txt/.csv with odd MIME types, which
+            // would grey them out; Ghostleaf filters by file name instead
             i.setType("*/*");
-            i.putExtra(Intent.EXTRA_MIME_TYPES, MIME_TYPES);
             i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             try {
                 startActivityForResult(i, PICK_DOCUMENTS);

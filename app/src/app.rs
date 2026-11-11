@@ -47,6 +47,11 @@ pub struct GhostleafApp {
     insets: Option<crate::InsetsFn>,
     #[cfg_attr(not(target_os = "android"), allow(dead_code))]
     was_focused: bool,
+    /// Android: the system picker is open (until this time); poll for results.
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    picker_until: f64,
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    last_poll: f64,
 }
 
 impl GhostleafApp {
@@ -84,6 +89,8 @@ impl GhostleafApp {
             inbox,
             insets,
             was_focused: true,
+            picker_until: 0.0,
+            last_poll: 0.0,
         }
     }
 
@@ -137,6 +144,7 @@ impl GhostleafApp {
         #[cfg(target_os = "android")]
         let files: Option<Vec<PathBuf>> = {
             crate::android::pick_documents();
+            self.picker_until = ctx.input(|i| i.time) + 120.0;
             None
         };
         let now = ctx.input(|i| i.time);
@@ -261,16 +269,35 @@ impl GhostleafApp {
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
         let regained = focused && !self.was_focused;
         self.was_focused = focused;
-        if now < 3.0 {
-            ctx.request_repaint_after(std::time::Duration::from_millis(300));
-        } else if !regained {
+        // While the picker is open (and right after start-up, for an "Open with"
+        // launch) keep checking a few times a second; otherwise at most twice a
+        // second, on frames that happen anyway. One cheap JNI call each.
+        let waiting = now < self.picker_until || now < 3.0;
+        if waiting {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
+        if !regained && now - self.last_poll < if waiting { 0.2 } else { 0.5 } {
             return;
         }
+        self.last_poll = now;
+        let docs = crate::android::take_documents();
+        if docs.is_empty() {
+            return;
+        }
+        self.picker_until = 0.0;
         let mut first = None;
-        for d in crate::android::take_documents() {
-            if let Some(id) = self.import_uri(&d.uri, &d.name) {
-                first.get_or_insert(id);
+        let mut failed = 0;
+        for d in docs {
+            match self.import_uri(&d.uri, &d.name) {
+                Some(id) => {
+                    first.get_or_insert(id);
+                }
+                None => failed += 1,
             }
+        }
+        if failed > 0 {
+            let t = i18n::tr(self.settings.language);
+            self.toast = Some((format!("{} ({failed})", t.cannot_open), now + 4.0));
         }
         if let Some(id) = first {
             self.open_book(&id, ctx);
@@ -281,6 +308,7 @@ impl GhostleafApp {
     /// we read it once through a descriptor to identify it, and keep the URI.
     #[cfg(target_os = "android")]
     fn import_uri(&mut self, uri: &str, name: &str) -> Option<String> {
+        log::info!("import {name} <- {uri}");
         let path = crate::android::open_uri(uri)?;
         let format = Format::from_path(Path::new(name)).or_else(|| {
             let mut b = [0u8; 5];
