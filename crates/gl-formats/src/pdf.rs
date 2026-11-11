@@ -102,7 +102,7 @@ impl PdfDoc {
 
 fn recolor(px: &mut [u8], theme: &RenderTheme) {
     let (p, k) = (theme.paper, theme.ink);
-    for c in px.chunks_exact_mut(4) {
+    for c in px.as_chunks_mut::<4>().0 {
         for i in 0..3 {
             let t = 1.0 - c[i] as f32 / 255.0; // 0 = white, 1 = black
             c[i] = (p[i] as f32 + (k[i] as f32 - p[i] as f32) * t).round() as u8;

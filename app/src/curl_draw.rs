@@ -50,21 +50,19 @@ pub struct CurlPaint {
     pub gutter: Option<(f32, f32)>,
 }
 
-/// Darkening factor for a sheet vertex near the spine. The shade fades out
-/// smoothly as the paper lifts off the page (by wrap angle, which is continuous
-/// across the fold), so only paper lying flat by the spine gets it, without
-/// steps. Face-up and face-down (crossed over) parts are both covered.
+/// Darkening factor for a sheet vertex near the spine. Only paper lying flat on
+/// its own side of the spine is in the gutter's shade: it fades out within the
+/// first few degrees of lift (continuously, so no seam at the fold), and the
+/// part of the page that has crossed over the spine is in the air, never shaded.
 fn gutter_factor(v: &gl_curl::CurlVertex, g: Option<(f32, f32)>) -> f32 {
-    use std::f32::consts::FRAC_PI_2;
     let Some((w, s)) = g else { return 1.0 };
-    let flat = if v.theta <= FRAC_PI_2 {
-        1.0 - v.theta / FRAC_PI_2
+    let flat = (1.0 - v.theta / 0.35).clamp(0.0, 1.0);
+    let x = v.pos.x;
+    if flat <= 0.0 || x < 0.0 || x >= w {
+        1.0
     } else {
-        (v.theta - FRAC_PI_2) / FRAC_PI_2
-    };
-    let flat = flat.clamp(0.0, 1.0).powi(2);
-    let x = v.pos.x.abs();
-    if x >= w { 1.0 } else { 1.0 - s * (1.0 - x / w) * flat }
+        1.0 - s * (1.0 - x / w) * flat * flat
+    }
 }
 
 fn gray(v: f32, a: u8) -> Color32 {

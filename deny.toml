@@ -5,6 +5,16 @@
 
 [graph]
 all-features = false
+# Only the platforms we ship. (Web/WASM-only dependencies such as
+# wasm-bindgen-futures -> tokio are never compiled into desktop builds.)
+targets = [
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
 
 [bans]
 multiple-versions = "allow"
@@ -50,12 +60,12 @@ allow = [
     "ISC",
     "Zlib",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
     "CC0-1.0",
     "BSL-1.0",
     "OFL-1.1",
+    # egui's built-in fallback fonts (Ubuntu, Hack, Noto Emoji)
+    "Ubuntu-font-1.0",
     "MPL-2.0",
     "0BSD",
     "Unlicense",
-    "CDLA-Permissive-2.0",
 ]
