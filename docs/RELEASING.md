@@ -19,7 +19,8 @@ Without the secret (forks, pull requests) builds still work, with synthesized so
 
 ## Making a release
 
-1. Bump `version` in the root `Cargo.toml` (`[workspace.package]`) and commit.
+1. Run [TESTING-WINDOWS.md](TESTING-WINDOWS.md) on the latest CI build.
+1. Bump `version` in the root `Cargo.toml` (`[workspace.package]`), write `docs/releases/v<version>.md` (it becomes the release text), and commit.
 2. Tag and push:
    ```bash
    git tag v0.1.0

@@ -1,4 +1,4 @@
-# Ghostleaf — Product & Technical Plan (v0.3)
+# Ghostleaf — Product & Technical Plan (v0.4)
 
 > Working name: **Ghostleaf** (see §11 for alternatives). A private, offline, Rust-native e-reader
 > that combines stealth reading, physical-feeling 3D page curl, and a 3D bookshelf —
@@ -6,7 +6,7 @@
 
 ---
 
-## 0. Decisions (2026-11-11)
+## 0. Decisions (updated 2026-11-11)
 | Topic | Decision |
 |---|---|
 | Name | **Ghostleaf** |
@@ -16,8 +16,13 @@
 | Licence | **Open source**: MIT OR Apache-2.0 |
 | v1 scope | **Windows only; PDF, TXT, CSV** |
 | UI languages | **English + Thai** at launch |
-| Web app | Decide later; not in v1 |
-| Mobile | Added to roadmap (Android + iOS), see §6.1 |
+| Web app | Later; it is also the fallback for iPhone/iPad if a native iOS build isn't possible (see below) |
+| Mobile | **Android in progress** (arm64, min Android 8 / API 26), see §6.1 |
+| Release order | Desktop v0.1.0 → Android phases 3–5 → Markdown → macOS/Linux packages → EPUB/CBZ → MOBI/AZW → 3D shelf + Thorium parity |
+| Apple | **No paid Apple Developer account.** macOS is built and shipped unsigned (Gatekeeper warns on first open). iOS only if it can be built and installed without a paid account; otherwise iPhone/iPad users get the web app |
+| App stores | **Build-only for now:** GitHub Releases (Windows, Linux, Android APK). Google Play maybe later; F-Droid optional |
+| Markdown | **Required:** read `.md` / `.markdown` files (added 2026-11-11), see §2.3 and roadmap Step 5 |
+| Biometric unlock | **Yes** (Android stealth reveal; adds the `USE_BIOMETRIC` permission only, no network) |
 | Who builds | Claude builds all of it; owner reviews and runs the Windows builds |
 
 ## 1. Goals and non-goals
@@ -27,7 +32,7 @@
 2. **Zero network by construction.** The app never opens a socket. No telemetry, accounts, crash uploaders, update pings, remote fonts or ads.
 3. **Store as little as possible, and show the user all of it.** Every byte the app saves can be inspected and deleted from inside the app.
 4. **Feel physical:** realistic 3D page curl with touch/mouse physics, paper sounds, 3D shelves.
-5. **Read anything common:** TXT, PDF, EPUB, MOBI, AZW, AZW3, CBZ (later CBR, FB2, DjVu).
+5. **Read anything common:** TXT, **Markdown**, PDF, EPUB, MOBI, AZW, AZW3, CBZ (later CBR, FB2, DjVu).
 6. **Instant stealth:** the reading surface hides the moment the cursor leaves the window.
 7. **Reading quality at least equal to Thorium Reader** for EPUB/PDF (TOC, bookmarks, search, typography settings, accessibility).
 
@@ -81,7 +86,8 @@
 | CBZ | Fixed (images) | `zip` + `image` (JPEG/PNG/WebP/AVIF) | Reads `ComicInfo.xml` for title and manga RTL. |
 | TXT | Reflow | `chardetng` + `encoding_rs` (UTF-8/16, TIS-620 Thai, GBK, Shift-JIS, Win-1252…) | Auto-detects chapter headings ("Chapter 1", "第1章", "บทที่ 1") to build a TOC. |
 | **CSV / TSV** (v1) | Paginated table | `csv` + encoding detection | Auto-detects delimiter (`,` `;` tab `|`); header row repeated on every page; column widths fitted to page; long cells wrap. |
-| Later | — | CBR (`unrar` licence check), FB2, DjVu, Markdown | "More formats coming". |
+| **Markdown** (`.md`, `.markdown`) | Reflow (rich text) | `pulldown-cmark` (CommonMark + GFM tables, task lists, strikethrough, footnotes) → styled text through the same pipeline as TXT | Headings build the TOC; code blocks in a monospace font; tables laid out like CSV; **images only from local relative paths, never fetched from the web**; raw HTML shown as text, never run; links open only after a confirm dialog. Theme colours and typography settings apply as for TXT. |
+| Later | — | CBR (`unrar` licence check), FB2, DjVu | "More formats coming". |
 
 All formats implement one trait:
 ```rust
@@ -241,17 +247,18 @@ ghostleaf/                     (cargo workspace)
 | Platform | Build | Notes |
 |---|---|---|
 | Windows 10/11 x64 + ARM64 | MSVC toolchain; MSI + portable ZIP; Microsoft Store (MSIX) later | Primary target; DX12 backend; opacity/click-through via Win32 |
-| macOS 12+ (Apple Silicon + Intel) | `.app`/`.dmg`, notarized | Metal; boss key needs Accessibility permission (prompted only if enabled) |
+| macOS 12+ (Apple Silicon + Intel) | `.app`/`.dmg`, **unsigned** (no Apple Developer account) | Metal; first open needs right-click → Open; boss key needs Accessibility permission (prompted only if enabled) |
 | Linux x64 | AppImage, `.deb`, Flatpak | Vulkan/GL; Wayland: opacity/always-on-top depend on compositor → Veil style default |
-| Android / iOS (v2) | see §6.1 | |
+| Android 8+ (arm64-v8a) | `cargo-ndk` + Gradle → APK on GitHub Releases | In progress; same egui app as desktop; see §6.1 |
+| iOS | Only if buildable without a paid Apple account; otherwise the web app | Deferred |
 | Web (WASM) | `trunk build --release`; installable PWA; static hosting or open locally | WebGPU with WebGL2 fallback; files via File System Access API (Chromium) or `<input type=file>`; no global boss key (in-page key only) |
 
 Targets: **binary ≤ 25 MB** (incl. PDFium ~5 MB, excl. optional CJK font pack), **cold start < 400 ms**, **page turn at a steady 60 fps on integrated GPUs**, **idle RAM < 150 MB** with a 500-page PDF open.
 
-### 6.1 Mobile (Android & iOS), roadmap phase v2
-**Approach:** reuse the same Rust crates; the page model, formats, layout, curl physics and storage are platform-neutral. A spike at the start of v2 picks one of:
-1. **Same egui/wgpu app on mobile** (winit supports Android well, iOS experimentally): maximum reuse, identical curl everywhere.
-2. **Fallback: Rust core + native shells.** Expose `gl-core`/`gl-formats`/`gl-layout`/`gl-anim` through **UniFFI**; thin **Kotlin (Compose)** and **Swift (SwiftUI)** UIs host a wgpu surface for the page/curl view. More native feel, more code.
+### 6.1 Mobile (Android now, iOS undecided)
+**Approach (decided, Android):** the **same egui app** runs on Android through a small `NativeActivity` subclass (`MainActivity.java`) that handles the document picker, "Open with", system-bar colours and file descriptors over JNI. Everything else (formats, curl, sounds, settings, library) is shared with desktop. The manifest declares **no permissions**.
+
+**iOS:** no paid Apple Developer account, so there's no App Store or TestFlight. A native build is attempted only if it can be installed without one; otherwise iPhone/iPad users get the web app (WASM PWA).
 
 **Mobile-specific design**
 - **Privacy you can verify:** the Android manifest has **no `INTERNET` permission**, so the OS itself blocks network access. iOS: App Store label "Data Not Collected"; the same `cargo-deny` gate keeps networking code out.
@@ -259,42 +266,62 @@ Targets: **binary ≤ 25 MB** (incl. PDFium ~5 MB, excl. optional CJK font pack)
 - **Stealth without a mouse:** blur the app snapshot in the app switcher; optional Android `FLAG_SECURE` (blocks screenshots/recents preview); **panic veil** via two-finger tap or turning the phone face-down; unveil with a tap or biometric.
 - **Reading UX:** single page in portrait, spread in landscape on tablets; finger-driven curl with velocity physics; optional haptic tick; bottom-sheet settings; volume-key page turning (Android).
 - **PDF engine:** prebuilt PDFium for Android (arm64-v8a, armeabi-v7a, x86_64) and iOS (xcframework).
-- **Builds & distribution:** Android via `cargo-ndk` + Gradle → F-Droid (suits an open-source, no-network app) and Google Play; iOS via an Xcode wrapper around the Rust static lib → App Store. CI on GitHub Actions.
+- **Builds & distribution:** Android via `cargo-ndk` + Gradle → signed APK on GitHub Releases. Google Play maybe later; F-Droid optional. CI on GitHub Actions.
 
 
 ---
 
 ## 7. Roadmap
 
-### v1.0 — Windows Core (PDF · TXT · CSV) ← first build done 2026-11-11, needs Windows testing
-- eframe/egui app, Windows-first; also compiles on macOS/Linux for development
-- Formats: **PDF** (PDFium), **TXT** (encoding detection incl. Thai TIS-620, chapter TOC, reflow), **CSV/TSV** (paginated tables)
-- Page turning: **3D curl** (corner/edge grab, spring physics, back face, shadow), **slide**, **none**; mouse/touch/keyboard/wheel/click zones
-- **Paper sounds** with one-key mute (`M`)
-- **Stealth:** hide on mouse-leave (and optionally focus loss); Veil / Minimize styles; boss key; always-on-top
-- **Display:** single / two-page spread / auto; **first blank page** toggle in the top bar; **LTR / RTL**
-- **Themes:** Light, Sepia, Dark, OLED black; TXT/CSV typography: size, line height, margins, paragraph spacing, justification
-- **Library:** grid of books with covers and progress (2D; 3D shelves arrive in v1.4); open via dialog or drag-and-drop
-- Bookmarks + resume position; **Privacy screen** (every stored file listed; forget book; wipe all); **portable mode**
-- UI in **English + Thai** (Thai font bundled)
-- `cargo-deny` network ban from day one
+### Done so far (2026-11-11)
+- **Desktop core:** Windows + Linux builds of the v1 feature set: PDF/TXT/CSV, 3D curl (spine-safe, soft shadows, gutter), slide/none, recorded paper sounds + mute, stealth veil, single/spread/auto, LTR/RTL, first blank page, 8 themes + custom tint, title-bar options, library, bookmarks, Privacy screen, English + Thai.
+- **CI/release:** CI on Windows, Linux and Android; `cargo-deny` network ban; tag `v*` → draft GitHub Release with Windows + Linux packages and SHA256SUMS; recorded sounds are an encrypted file in the repo, decrypted in CI with a secret.
+- **Android phases 1–2:** APK builds in CI; touch stealth (hide on focus loss, tap to reveal); compact phone layout; status-bar insets and bar colours; Open… via the system picker (reads through the granted file descriptor, no storage permission); "Open with"; reader top bar with show/hide tab that never triggers a page turn.
 
-### v1.1 — macOS + Linux releases
-Packaging (.dmg, AppImage/.deb/Flatpak) and per-platform stealth polish.
+### Step 1 — Desktop v0.1.0 release (small)
+- Owner runs the Windows checklist: boss key, Minimize hide style, `.exe` icon, high-DPI, a large PDF (memory, smoothness), Thai UI.
+- Fix what turns up, write release notes, tag `v0.1.0`.
 
-### v1.2 — EPUB + CBZ + deep customization
-Reflow engine (§2.4), EPUB 2/3 + fixed layout, comics, full typography/theme editor, profiles, hyphenation.
+### Step 2 — Android phase 3: polish (medium)
+- Tablets/landscape: two-page spread in landscape; rotation keeps the current page.
+- Edge-to-edge for target API 35 (content placed correctly under status/navigation bars).
+- Volume keys turn pages (toggle), keep screen on while reading, optional haptic tick on a turn.
+- Predictive back gesture; restore the reading position when Android closes the app in the background.
 
-### v1.3 — MOBI / AZW / AZW3
-PalmDOC/HUFF, KF8, DRM detection.
+### Step 3 — Android phase 4: mobile stealth (medium)
+- Blurred/blank thumbnail in Recents.
+- Optional screenshot/recording block (`FLAG_SECURE`).
+- Panic veil: two-finger tap, or phone turned face-down (motion sensor, no permission).
+- Reveal: tap, or optionally fingerprint/face (`USE_BIOMETRIC`, decided yes).
 
-### v1.4 — 3D bookshelf + Thorium parity
-3D shelves (§2.7), highlights/notes, full-text search, TTS, accessibility pass.
+### Step 4 — Android phase 5: proper releases (small)
+- Release signing key stored as an encrypted GitHub secret; signed APK attached to each GitHub Release next to Windows + Linux.
+- versionCode/versionName derived from the tag.
+- Google Play: maybe later (needs a $25 account + privacy policy). Not now.
 
-### v2.0 — Android + iOS (§6.1)
+### Step 5 — Markdown reader (small–medium)
+- `.md` / `.markdown` in the library, picker, drag-and-drop and Android "Open with".
+- Headings (TOC from headings), paragraphs, bold/italic/strikethrough, inline code and code blocks, block quotes, lists and task lists, horizontal rules, GFM tables, footnotes, local images.
+- Privacy: remote images and links are never loaded automatically; raw HTML is not executed.
+- First user of rich styled text, so it's groundwork for the EPUB engine in Step 7.
 
-### Later / undecided
-Web app (WASM PWA): owner decides after v1. CBR, FB2, DjVu.
+### Step 6 — v1.1: macOS + Linux packages (small–medium)
+- Linux: AppImage + `.deb` (Flatpak later).
+- macOS: unsigned `.dmg` (Apple Silicon + Intel); README explains the first-open warning.
+
+### Step 7 — v1.2: EPUB + CBZ + deep customization (large)
+Reflow engine (§2.4), EPUB 2/3 + fixed layout, comics with manga RTL detection, hyphenation, saved style presets, publisher-styles toggle. Reuses the TXT/CSV text pipeline.
+
+### Step 8 — v1.3: MOBI / AZW / AZW3 (medium)
+PalmDOC/HUFF, KF8; DRM-protected files rejected with a clear message.
+
+### Step 9 — v1.4: 3D bookshelf + Thorium parity (large)
+3D shelves (§2.7), highlights/notes, full-text search, read-aloud with system voices, accessibility pass.
+
+### Later
+- **Web app (WASM PWA):** also the iPhone/iPad route if a native iOS build isn't possible without a paid Apple account.
+- iOS native build: only if installable without a paid account.
+- CBR, FB2, DjVu.
 
 ## 8. Testing & quality
 - **Corpus:** public-domain books (Project Gutenberg EPUB/TXT, Standard Ebooks), PDF.js & PDFBox test PDFs, synthetic MOBI/AZW3 via Calibre conversion, Thai/Arabic/Japanese samples, manga CBZ.
@@ -320,8 +347,8 @@ Web app (WASM PWA): owner decides after v1. CBR, FB2, DjVu.
 ---
 
 ## 10. Licensing & distribution
-- **Decided: MIT OR Apache-2.0** for the app (all planned deps are compatible: PDFium BSD-3, fonts OFL, sounds CC0).
-- Distribution: GitHub Releases, winget, Microsoft Store, Homebrew cask, Flathub, static web build.
+- **Decided: MIT OR Apache-2.0** for the app (deps are compatible: PDFium BSD-3, fonts OFL). Paper sounds come from the Sonniss GDC bundle (royalty-free; raw files aren't redistributed, so the repo holds only an encrypted copy, see docs/SOUNDS.md).
+- Distribution now: **GitHub Releases only** (Windows, Linux, Android APK; macOS unsigned from v1.1). Later options: Google Play, winget, Flathub, F-Droid, static web build. No paid Apple distribution.
 - Optional monetization that keeps privacy: one-time "supporter" purchase via the store; no accounts.
 
 ---
@@ -339,7 +366,7 @@ Alternatives B (Open leaves) and C (Vanish) are kept in `branding/` for referenc
 - Workspace: `crates/gl-core` (settings, library, JSON store), `crates/gl-formats` (PDF via PDFium, TXT and CSV via cosmic-text, Thai word breaks via ICU4X), `crates/gl-curl` (curl geometry + springs, unit-tested), `app` (eframe/egui 0.37).
 - The page curl is a CPU-deformed 36×48 grid drawn as textured egui meshes (front, back, shadows). It runs on any egui backend, so mobile can reuse it unchanged.
 - Each open book has its own worker thread (layout + rendering); the UI thread never blocks.
-- Paper sounds are synthesized (filtered noise and flutter), so there are no audio assets.
+- Paper sounds: recorded (Sonniss GDC) when the decrypted files are present at build time, otherwise synthesized (filtered noise and flutter).
 - Verified on Linux (software GL): library, PDF/TXT/CSV, spread and single, curl forward/back by drag and click, RTL + flyleaf, dark theme, stealth veil, settings, privacy, Thai UI. **Not yet run on Windows.**
 
 ### 2026-11-11 — first Windows feedback (fixed)
@@ -350,5 +377,6 @@ Alternatives B (Open leaves) and C (Vanish) are kept in `branding/` for referenc
 - Sounds: recorded page turns from the Sonniss GDC bundle (flip / peel / land), embedded at build time if present (git-ignored), with synthesized fallback. See docs/SOUNDS.md.
 
 ## 13. Still open
-1. Web app: hosted publicly or offline-only bundle (after v1).
-2. Windows-specific checks: boss key, minimize-style stealth, `.exe` icon embedding, high-DPI.
+1. Web app: hosted publicly or offline-only bundle; also decides the iPhone/iPad route.
+2. Windows checks before v0.1.0: boss key, minimize-style stealth, `.exe` icon embedding, high-DPI.
+3. Google Play / F-Droid: later, after signed APKs are on GitHub Releases.

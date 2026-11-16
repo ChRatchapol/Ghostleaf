@@ -102,7 +102,7 @@ docs/PLAN.md         product and technical plan, roadmap (EPUB, MOBI, CBZ, 3D sh
 
 ## Roadmap
 
-v1.1 macOS + Linux releases · v1.2 EPUB + CBZ + deeper customization · v1.3 MOBI/AZW/AZW3 · v1.4 3D bookshelf, highlights, search, TTS · v2.0 Android + iOS. See [docs/PLAN.md](docs/PLAN.md).
+Android (in progress) · Markdown · macOS + Linux packages · EPUB + CBZ + deeper customization · MOBI/AZW/AZW3 · 3D bookshelf, highlights, search, read-aloud · web app. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Licence
 

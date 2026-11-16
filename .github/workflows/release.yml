@@ -90,6 +90,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          sparse-checkout: docs/releases
       - uses: actions/download-artifact@v4
         with:
           path: files
@@ -97,10 +101,19 @@ jobs:
       - name: Checksums
         working-directory: files
         run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Release notes
+        run: |
+          # hand-written notes if docs/releases/<tag>.md exists, else a stub
+          if [ -f "docs/releases/$TAG.md" ]; then
+            tail -n +2 "docs/releases/$TAG.md" > notes.md
+          else
+            echo "See the commit list below." > notes.md
+          fi
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           name: Ghostleaf ${{ env.TAG }}
           draft: true
+          body_path: notes.md
           generate_release_notes: true
           files: files/*
