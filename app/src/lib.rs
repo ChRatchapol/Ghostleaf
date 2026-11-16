@@ -75,6 +75,12 @@ pub(crate) fn book_available(path: &std::path::Path) -> bool {
     path.to_str().is_some_and(|s| s.starts_with("content://")) || path.exists()
 }
 
+/// A light haptic tick on a page turn (phones/tablets only).
+pub(crate) fn haptic_tick() {
+    #[cfg(target_os = "android")]
+    android::haptic_tick();
+}
+
 /// Release whatever [`resolve_book_path`] opened (Android file descriptors).
 pub(crate) fn release_book_path(_path: &std::path::Path) {
     #[cfg(target_os = "android")]

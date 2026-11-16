@@ -434,6 +434,9 @@ impl Reader {
                 None => return,
             },
         };
+        if env.settings.haptics {
+            crate::haptic_tick();
+        }
         if style == TurnStyle::None {
             let v = if dir == Dir::Fwd { to } else { from };
             self.set_view(v, env, blank);
@@ -679,6 +682,9 @@ impl Reader {
                 t.spring.vel = t.vel.v * 0.6;
                 if done && env.settings.sound {
                     env.sound.play(Sfx::Land, env.settings.volume);
+                }
+                if done && env.settings.haptics {
+                    crate::haptic_tick();
                 }
             }
         }

@@ -285,8 +285,9 @@ Targets: **binary ≤ 25 MB** (incl. PDFium ~5 MB, excl. optional CJK font pack)
 ### Step 2 — Android phase 3: polish (medium)
 - Tablets/landscape: two-page spread in landscape; rotation keeps the current page.
 - Edge-to-edge for target API 35 (content placed correctly under status/navigation bars).
-- Volume keys turn pages (toggle), keep screen on while reading, optional haptic tick on a turn.
-- Predictive back gesture; restore the reading position when Android closes the app in the background.
+- ✅ Volume keys turn pages (toggle), keep screen on while reading, optional haptic tick on a turn (built 2026-11-16, awaiting device test).
+- ✅ Library and settings are saved the moment the app goes to the background, so the reading position survives Android closing it.
+- Predictive back gesture (with the API 35 work).
 
 ### Step 3 — Android phase 4: mobile stealth (medium)
 - Blurred/blank thumbnail in Recents.

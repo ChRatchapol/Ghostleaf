@@ -3,17 +3,87 @@
 //! Kept free of Android-only types (it only needs the JavaVM and activity
 //! pointers), so it also type-checks on desktop. Used only on Android.
 
-use jni::JavaVM;
-use jni::objects::{JObject, JObjectArray, JString, JValue};
+use jni::objects::{JClass, JObject, JObjectArray, JString, JValue};
 use jni::sys;
+use jni::{JNIEnv, JavaVM, NativeMethod};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicI32, Ordering};
+
+/// Asks the UI to draw a frame; set once the egui context exists.
+static WAKER: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
+/// Page steps from the volume keys, not yet consumed (+ = forward).
+static PAGE_STEPS: AtomicI32 = AtomicI32::new(0);
+
+fn wake() {
+    if let Some(w) = WAKER.get() {
+        w();
+    }
+}
+
+extern "system" fn native_wake(_env: JNIEnv, _class: JClass) {
+    wake();
+}
+
+extern "system" fn native_page_step(_env: JNIEnv, _class: JClass, direction: sys::jint) {
+    PAGE_STEPS.fetch_add(direction.signum(), Ordering::SeqCst);
+    wake();
+}
+
+/// Let Java wake the UI (e.g. when a picked document arrives or a volume key is pressed).
+pub fn set_waker(f: Box<dyn Fn() + Send + Sync>) {
+    let _ = WAKER.set(f);
+}
+
+/// Net page steps requested with the volume keys since the last call.
+pub fn take_page_steps() -> i32 {
+    PAGE_STEPS.swap(0, Ordering::SeqCst)
+}
 
 /// (JavaVM*, activity jobject) from android-activity.
 static PTRS: OnceLock<(usize, usize)> = OnceLock::new();
 
 pub fn init(vm: *mut core::ffi::c_void, activity: *mut core::ffi::c_void) {
     let _ = PTRS.set((vm as usize, activity as usize));
+    // Java -> Rust callbacks. If this fails the app still works: it polls for
+    // documents and the volume keys keep changing the volume.
+    with_activity(|env, a| {
+        let class = env.get_object_class(a)?;
+        env.register_native_methods(
+            &class,
+            &[
+                NativeMethod {
+                    name: "nativeWake".into(),
+                    sig: "()V".into(),
+                    fn_ptr: native_wake as *mut core::ffi::c_void,
+                },
+                NativeMethod {
+                    name: "nativePageStep".into(),
+                    sig: "(I)V".into(),
+                    fn_ptr: native_page_step as *mut core::ffi::c_void,
+                },
+            ],
+        )
+    });
+}
+
+fn call_bool(method: &str, on: bool) {
+    with_activity(|env, a| env.call_method(a, method, "(Z)V", &[JValue::Bool(on as u8)]).map(|_| ()));
+}
+
+/// Volume keys turn pages (true) or change the volume (false).
+pub fn set_volume_keys(on: bool) {
+    call_bool("setVolumeKeys", on);
+}
+
+/// Keep the screen on (while a book is open).
+pub fn set_keep_screen_on(on: bool) {
+    call_bool("setKeepScreenOn", on);
+}
+
+/// A light haptic tick.
+pub fn haptic_tick() {
+    with_activity(|env, a| env.call_method(a, "hapticTick", "()V", &[]).map(|_| ()));
 }
 
 /// Run `f` with a JNI env attached to this thread and the activity object.

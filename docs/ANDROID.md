@@ -1,8 +1,15 @@
 # Android
 
-Status: **phase 2**. Same app as on desktop: library, PDF/TXT/CSV reading,
-page curl, sounds, themes, stealth (covers the page when you leave the app),
-the system file picker and "Open with Ghostleaf".
+Status: **phase 3 (in progress)**. Same app as on desktop: library, PDF/TXT/CSV
+reading, page curl, sounds, themes, stealth (covers the page when you leave the
+app), the system file picker and "Open with Ghostleaf".
+
+While a book is open (Settings → This device):
+- the **volume keys turn pages** (down = next, up = previous),
+- the **screen stays on**,
+- optionally a **light vibration** on each page turn (off by default; needs no permission).
+
+In landscape, the *Auto* display mode shows two pages side by side.
 
 - arm64 (`arm64-v8a`) only, Android 8.0+ (API 26)
 - The manifest requests **no permissions at all**, not even `INTERNET`, so
@@ -56,6 +63,6 @@ app/  (ghostleaf_app lib)    the whole app, shared with desktop; desktop-only pa
 
 1. ✅ Gradle project, Android entry point, APK in CI
 2. ✅ File picker, "Open with Ghostleaf", back button, phone layout, system bars, touch stealth
-3. Polish on devices: tablets/landscape spread, soft keyboard for "go to page", edge-to-edge (target API 35)
+3. Polish on devices: ✅ volume-key page turns, keep screen on, haptic tick, save on backgrounding · to do: tablet/landscape checks, edge-to-edge and predictive back (target API 35)
 4. More mobile stealth: blurred recents thumbnail, optional screenshot block, two-finger tap veil
 5. Release signing (keystore in CI secrets) and the APK attached to GitHub Releases

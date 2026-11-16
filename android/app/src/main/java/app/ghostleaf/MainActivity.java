@@ -9,6 +9,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
+import android.view.HapticFeedbackConstants;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -21,14 +23,60 @@ import java.util.ArrayList;
  * Everything is drawn by libghostleaf.so; this class only does what needs the
  * Android framework: the system file picker, "Open with Ghostleaf", reading a
  * picked document without copying it (a file descriptor), and colouring the
- * system bars. Rust calls these methods over JNI (app/src/android.rs) and polls
- * {@link #takeDocuments()}; there are no native callbacks.
+ * system bars, volume keys, keep-screen-on and the haptic tick. Rust calls these
+ * methods over JNI (app/src/android.rs) and polls {@link #takeDocuments()}. Two
+ * tiny native callbacks (registered by Rust at start-up) tell the app to redraw
+ * and report volume-key page steps.
  *
  * Privacy: no network, no copies. Picked files stay where they are; Ghostleaf
  * keeps a read permission for them so they can be reopened after a restart.
  */
 public class MainActivity extends NativeActivity {
     private static final int PICK_DOCUMENTS = 4711;
+
+    /** Set from Rust: volume keys turn pages (only while a book is open). */
+    private volatile boolean volumeKeys;
+
+    // Implemented in Rust (app/src/android.rs), registered with RegisterNatives.
+    private static native void nativeWake();
+
+    private static native void nativePageStep(int direction);
+
+    /** Ask the native side to draw a frame (it sleeps while nothing changes). */
+    private static void wake() {
+        try {
+            nativeWake();
+        } catch (Throwable ignored) {
+            // natives not registered: the app polls instead
+        }
+    }
+
+    private static boolean isVolumeKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP;
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (volumeKeys && isVolumeKey(keyCode)) {
+            try {
+                if (event.getRepeatCount() == 0) {
+                    nativePageStep(keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ? 1 : -1);
+                }
+                return true;
+            } catch (Throwable ignored) {
+                volumeKeys = false; // natives missing: let the keys change the volume
+            }
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (volumeKeys && isVolumeKey(keyCode)) {
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
+    }
     
 
     /** "uri\nname" entries waiting for the native side. */
@@ -112,6 +160,7 @@ public class MainActivity extends NativeActivity {
         synchronized (pending) {
             pending.add(uri.toString() + "\n" + displayName(uri));
         }
+        wake();
     }
 
     private String displayName(Uri uri) {
@@ -146,6 +195,27 @@ public class MainActivity extends NativeActivity {
         } catch (Exception e) {
             return -1;
         }
+    }
+
+    /** Called from Rust: whether the volume keys turn pages right now. */
+    public void setVolumeKeys(boolean on) {
+        volumeKeys = on;
+    }
+
+    /** Called from Rust: keep the screen from dimming and locking while a book is open. */
+    public void setKeepScreenOn(final boolean on) {
+        runOnUiThread(() -> {
+            if (on) {
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } else {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            }
+        });
+    }
+
+    /** Called from Rust: a light tick when a page turns (needs no permission; follows the system setting). */
+    public void hapticTick() {
+        runOnUiThread(() -> getWindow().getDecorView().performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK));
     }
 
     /** Called from Rust: colour the status and navigation bars to match the reading theme. */

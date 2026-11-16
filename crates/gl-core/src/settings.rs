@@ -195,6 +195,12 @@ pub struct Settings {
     pub default_rtl: bool,
     /// Show the "first blank page" (flyleaf) for new books.
     pub default_first_blank: bool,
+    /// Phones/tablets: the volume keys turn pages while a book is open.
+    pub volume_keys: bool,
+    /// Phones/tablets: keep the screen on while a book is open.
+    pub keep_screen_on: bool,
+    /// Phones/tablets: a light vibration on each page turn.
+    pub haptics: bool,
 }
 
 impl Default for Settings {
@@ -215,6 +221,9 @@ impl Default for Settings {
             save_covers: true,
             default_rtl: false,
             default_first_blank: false,
+            volume_keys: true,
+            keep_screen_on: true,
+            haptics: false,
         }
     }
 }

@@ -231,6 +231,11 @@ pub fn settings_window(ctx: &egui::Context, open: &mut bool, s: &mut Settings, t
                     if !cfg!(target_os = "android") {
                         ch |= ui.checkbox(&mut st.boss_key, t.boss_key).changed();
                         ch |= window_section(ui, s, t);
+                    } else {
+                        section(ui, t.this_device);
+                        ch |= ui.checkbox(&mut s.volume_keys, t.volume_keys).changed();
+                        ch |= ui.checkbox(&mut s.keep_screen_on, t.keep_screen_on).changed();
+                        ch |= ui.checkbox(&mut s.haptics, t.haptics).changed();
                     }
 
                     section(ui, t.language);

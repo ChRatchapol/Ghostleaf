@@ -39,6 +39,9 @@ pub struct GhostleafApp {
     applied_theme: Option<u64>,
     applied_titlebar: Option<(TitleBar, u64)>,
     applied_on_top: Option<bool>,
+    /// Android: (volume keys turn pages, keep screen on) as last sent to the activity.
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    applied_device: Option<(bool, bool)>,
     title_set: String,
     font_list: Option<Vec<String>>,
     toast: Option<(String, f64)>,
@@ -62,6 +65,11 @@ impl GhostleafApp {
             insets,
         } = launch;
         style::install_fonts(&cc.egui_ctx);
+        #[cfg(target_os = "android")]
+        {
+            let c = cc.egui_ctx.clone();
+            crate::android::set_waker(Box::new(move || c.request_repaint()));
+        }
         let store = Store::open();
         let settings = store.load_settings();
         let library = store.load_library();
@@ -82,6 +90,7 @@ impl GhostleafApp {
             applied_theme: None,
             applied_titlebar: None,
             applied_on_top: None,
+            applied_device: None,
             title_set: String::new(),
             font_list: None,
             toast: None,
@@ -185,6 +194,17 @@ impl GhostleafApp {
         }
         let tb = (self.settings.title_bar, key);
         #[cfg(target_os = "android")]
+        {
+            // only while a book is open and visible: otherwise the keys and the screen behave normally
+            let reading = self.reader.is_some() && !hidden;
+            let dev = (reading && self.settings.volume_keys, reading && self.settings.keep_screen_on);
+            if self.applied_device != Some(dev) {
+                crate::android::set_volume_keys(dev.0);
+                crate::android::set_keep_screen_on(dev.1);
+                self.applied_device = Some(dev);
+            }
+        }
+        #[cfg(target_os = "android")]
         if self.applied_titlebar != Some(tb) {
             crate::android::set_bar_colors([pal.bg.r(), pal.bg.g(), pal.bg.b()], !pal.dark);
             self.applied_titlebar = Some(tb);
@@ -255,6 +275,21 @@ impl eframe::App for GhostleafApp {
         }
     }
 
+    #[cfg(target_os = "android")]
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // volume keys (reported by MainActivity) act as Page Down / Page Up
+        let steps = crate::android::take_page_steps();
+        if steps != 0 {
+            raw.events.push(egui::Event::Key {
+                key: if steps > 0 { egui::Key::PageDown } else { egui::Key::PageUp },
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+        }
+    }
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.save(f64::MAX, true);
     }
@@ -268,6 +303,10 @@ impl GhostleafApp {
     fn poll_android_documents(&mut self, ctx: &egui::Context, now: f64) {
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
         let regained = focused && !self.was_focused;
+        if !focused && self.was_focused {
+            // going to the background: Android may close the app without notice
+            self.save(now, true);
+        }
         self.was_focused = focused;
         // While the picker is open (and right after start-up, for an "Open with"
         // launch) keep checking a few times a second; otherwise at most twice a
